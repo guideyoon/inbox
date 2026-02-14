@@ -612,10 +612,16 @@ class AppController extends StateNotifier<AppState> {
         final remoteFolders = await cloud!.fetchFolders(userId);
         final remoteTags = await cloud!.fetchTags(userId);
         final remoteLinks = await cloud!.fetchLinks(userId);
-        await _mergeRemoteFolders(remoteFolders);
-        await _mergeRemoteTags(remoteTags);
-        await _mergeRemoteLinks(remoteLinks);
-        await refresh();
+        try {
+          await _mergeRemoteFolders(remoteFolders);
+          await _mergeRemoteTags(remoteTags);
+          await _mergeRemoteLinks(remoteLinks);
+          await refresh();
+        } catch (e) {
+          debugPrint('sync pull merge failed: $e');
+          // 로컬 DB 병합 실패 시에도 서버 데이터를 즉시 표시
+          state = state.copyWith(folders: remoteFolders, tags: remoteTags, links: remoteLinks);
+        }
       } catch (e) {
         debugPrint('sync pull failed: $e');
       }
@@ -638,10 +644,15 @@ class AppController extends StateNotifier<AppState> {
         final remoteFolders = await cloud!.fetchFolders(userId);
         final remoteTags = await cloud!.fetchTags(userId);
         final remoteLinks = await cloud!.fetchLinks(userId);
-        await _mergeRemoteFolders(remoteFolders);
-        await _mergeRemoteTags(remoteTags);
-        await _mergeRemoteLinks(remoteLinks);
-        await refresh();
+        try {
+          await _mergeRemoteFolders(remoteFolders);
+          await _mergeRemoteTags(remoteTags);
+          await _mergeRemoteLinks(remoteLinks);
+          await refresh();
+        } catch (e) {
+          debugPrint('sync final pull merge failed: $e');
+          state = state.copyWith(folders: remoteFolders, tags: remoteTags, links: remoteLinks);
+        }
       } catch (e) {
         debugPrint('sync final pull failed: $e');
       }
