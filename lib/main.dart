@@ -541,6 +541,22 @@ class AppController extends StateNotifier<AppState> {
 
   String? get _userId => _cloudConfigured ? Supabase.instance.client.auth.currentUser?.id : null;
 
+  Future<bool> _ensureLocalScopeForAuthUser(String? userId) async {
+    final activeUserId = (await repo.getString('active_cloud_user_id')) ?? '';
+
+    if (userId == null) {
+      if (activeUserId.isEmpty) return false;
+      await repo.clearContent();
+      await repo.saveString('active_cloud_user_id', '');
+      return true;
+    }
+
+    if (activeUserId == userId) return false;
+    await repo.clearContent();
+    await repo.saveString('active_cloud_user_id', userId);
+    return true;
+  }
+
   @override
   void dispose() {
     _authSub?.cancel();
@@ -553,10 +569,33 @@ class AppController extends StateNotifier<AppState> {
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((event) async {
       final user = event.session?.user;
       if (user != null) {
-        state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
+        final cleared = await _ensureLocalScopeForAuthUser(user.id);
+        state = state.copyWith(
+          signedIn: true,
+          userEmail: user.email,
+          authGatePassed: true,
+          links: cleared ? const [] : state.links,
+          tags: cleared ? const [] : state.tags,
+          folders: cleared ? const [] : state.folders,
+          candidate: null,
+          dismissedUrls: cleared ? <String>{} : state.dismissedUrls,
+        );
         await _syncOnLogin(user.id);
       } else {
-        state = state.copyWith(signedIn: false, userEmail: null, authGatePassed: false);
+        final cleared = await _ensureLocalScopeForAuthUser(null);
+        state = state.copyWith(
+          signedIn: false,
+          userEmail: null,
+          authGatePassed: false,
+          links: cleared ? const [] : state.links,
+          tags: cleared ? const [] : state.tags,
+          folders: cleared ? const [] : state.folders,
+          candidate: null,
+          dismissedUrls: cleared ? <String>{} : state.dismissedUrls,
+        );
+        if (cleared) {
+          await _syncReminder();
+        }
       }
     });
   }
@@ -578,26 +617,50 @@ class AppController extends StateNotifier<AppState> {
     );
   }
 
-  Future<void> signUpWithEmail(String email, String password) async {
-    if (!_cloudConfigured) return;
-    await Supabase.instance.client.auth.signUp(
+  Future<bool> signUpWithEmail(String email, String password) async {
+    if (!_cloudConfigured) return false;
+    final response = await Supabase.instance.client.auth.signUp(
       email: email.trim(),
       password: password,
     );
+    final session = response.session;
+    final user = response.user ?? session?.user;
+    if (session != null && user != null) {
+      state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
+      return true;
+    }
+    return false;
   }
 
   Future<void> signInWithEmail(String email, String password) async {
     if (!_cloudConfigured) return;
-    await Supabase.instance.client.auth.signInWithPassword(
+    final response = await Supabase.instance.client.auth.signInWithPassword(
       email: email.trim(),
       password: password,
     );
+    final user = response.user;
+    if (user != null) {
+      state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
+    }
   }
 
   Future<void> signOutCloud() async {
     if (!_cloudConfigured) return;
     await Supabase.instance.client.auth.signOut();
-    state = state.copyWith(signedIn: false, userEmail: null, authGatePassed: false);
+    final cleared = await _ensureLocalScopeForAuthUser(null);
+    state = state.copyWith(
+      signedIn: false,
+      userEmail: null,
+      authGatePassed: false,
+      links: cleared ? const [] : state.links,
+      tags: cleared ? const [] : state.tags,
+      folders: cleared ? const [] : state.folders,
+      candidate: null,
+      dismissedUrls: cleared ? <String>{} : state.dismissedUrls,
+    );
+    if (cleared) {
+      await _syncReminder();
+    }
   }
 
   Future<void> continueWithoutLogin() async {
@@ -737,6 +800,7 @@ class AppController extends StateNotifier<AppState> {
       if (!kIsWeb) {
         await reminder.init();
       }
+      await _ensureLocalScopeForAuthUser(user?.id);
       state = state.copyWith(
         loading: false,
         clipboardEnabled: await repo.getBool('clipboard_enabled') ?? true,
@@ -756,6 +820,9 @@ class AppController extends StateNotifier<AppState> {
       _processSharedLinksInBackground();
     } catch (e) {
       // 초기화 실패 시에도 앱이 로드되도록 함
+      if (user == null) {
+        await _ensureLocalScopeForAuthUser(null);
+      }
       state = state.copyWith(
         loading: false,
         cloudConfigured: _cloudConfigured,
@@ -1197,6 +1264,15 @@ class AppRepository {
     await d.transaction((txn) async {
       await txn.update('links', {'folder_id': null}, where: 'folder_id = ?', whereArgs: [id]);
       await txn.delete('folders', where: 'id = ?', whereArgs: [id]);
+    });
+  }
+
+  Future<void> clearContent() async {
+    final d = await db;
+    await d.transaction((txn) async {
+      await txn.delete('links');
+      await txn.delete('tags');
+      await txn.delete('folders');
     });
   }
 
@@ -2118,10 +2194,10 @@ class AuthEntryPage extends ConsumerWidget {
                         final input = await _showEmailAuthDialog(context);
                         if (input == null) return;
                         try {
-                          final mode = await _submitEmailAuth(c, input);
-                          if (mode == _EmailAuthMode.signUp) {
+                          final outcome = await _submitEmailAuth(c, input);
+                          if (outcome == _EmailAuthOutcome.signUpPendingVerification) {
                             if (!context.mounted) return;
-                            await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다.');
+                            await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.');
                           }
                         } catch (e) {
                           if (!context.mounted) return;
@@ -2825,10 +2901,10 @@ class SettingsPage extends ConsumerWidget {
                       final input = await _showEmailAuthDialog(context);
                       if (input == null) return;
                       try {
-                        final mode = await _submitEmailAuth(c, input);
-                        if (mode == _EmailAuthMode.signUp) {
+                        final outcome = await _submitEmailAuth(c, input);
+                        if (outcome == _EmailAuthOutcome.signUpPendingVerification) {
                           if (!context.mounted) return;
-                          await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다.');
+                          await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.');
                         }
                       } catch (e) {
                         if (!context.mounted) return;
@@ -3224,13 +3300,15 @@ class _EmailAuthInput {
   final _EmailAuthMode mode;
 }
 
-Future<_EmailAuthMode> _submitEmailAuth(AppController controller, _EmailAuthInput input) async {
+enum _EmailAuthOutcome { signedIn, signUpPendingVerification }
+
+Future<_EmailAuthOutcome> _submitEmailAuth(AppController controller, _EmailAuthInput input) async {
   if (input.mode == _EmailAuthMode.signUp) {
-    await controller.signUpWithEmail(input.email, input.password);
-    return _EmailAuthMode.signUp;
+    final signedIn = await controller.signUpWithEmail(input.email, input.password);
+    return signedIn ? _EmailAuthOutcome.signedIn : _EmailAuthOutcome.signUpPendingVerification;
   }
   await controller.signInWithEmail(input.email, input.password);
-  return _EmailAuthMode.signIn;
+  return _EmailAuthOutcome.signedIn;
 }
 
 Future<_EmailAuthInput?> _showEmailAuthDialog(
