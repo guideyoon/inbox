@@ -555,7 +555,7 @@ class AppController extends StateNotifier<AppState> {
       if (user != null) {
         await repo.saveBool('guest_mode', false);
         state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
-        await _syncOnLogin();
+        await _syncOnLogin(user.id);
       } else {
         final guestMode = await repo.getBool('guest_mode') ?? false;
         state = state.copyWith(signedIn: false, userEmail: null, authGatePassed: guestMode);
@@ -563,12 +563,12 @@ class AppController extends StateNotifier<AppState> {
     });
   }
 
-  Future<void> _syncOnLogin() async {
-    await syncNow();
+  Future<void> _syncOnLogin(String userId) async {
+    await syncNow(forceUserId: userId);
     // OAuth redirect 직후 토큰/세션 반영 지연 대비 1회 재시도
     Future<void>.delayed(const Duration(seconds: 2), () async {
       if (!mounted || !state.signedIn) return;
-      await syncNow(silent: true);
+      await syncNow(silent: true, forceUserId: userId);
     });
   }
 
@@ -600,9 +600,9 @@ class AppController extends StateNotifier<AppState> {
     state = state.copyWith(authGatePassed: true);
   }
 
-  Future<void> syncNow({bool silent = false}) async {
+  Future<void> syncNow({bool silent = false, String? forceUserId}) async {
     if (cloud == null) return;
-    final userId = _userId;
+    final userId = forceUserId ?? _userId;
     if (userId == null) return;
 
     if (!silent) state = state.copyWith(syncing: true);
@@ -734,7 +734,7 @@ class AppController extends StateNotifier<AppState> {
       _bindAuthState();
       await refresh();
       if (user != null) {
-        await _syncOnLogin();
+        await _syncOnLogin(user.id);
       }
       // 공유 링크는 비동기로 처리 (UI 블로킹 방지)
       _processSharedLinksInBackground();
