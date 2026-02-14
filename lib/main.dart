@@ -555,11 +555,20 @@ class AppController extends StateNotifier<AppState> {
       if (user != null) {
         await repo.saveBool('guest_mode', false);
         state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
-        await syncNow(silent: true);
+        await _syncOnLogin();
       } else {
         final guestMode = await repo.getBool('guest_mode') ?? false;
         state = state.copyWith(signedIn: false, userEmail: null, authGatePassed: guestMode);
       }
+    });
+  }
+
+  Future<void> _syncOnLogin() async {
+    await syncNow();
+    // OAuth redirect 직후 토큰/세션 반영 지연 대비 1회 재시도
+    Future<void>.delayed(const Duration(seconds: 2), () async {
+      if (!mounted || !state.signedIn) return;
+      await syncNow(silent: true);
     });
   }
 
@@ -598,22 +607,31 @@ class AppController extends StateNotifier<AppState> {
 
     if (!silent) state = state.copyWith(syncing: true);
     try {
-      final localFolders = await repo.folders();
-      final localTags = await repo.tags();
-      final localLinks = await repo.links();
+      // 1) 로그인 직후에는 먼저 서버에서 pull (push 실패여도 웹에 데이터 표시 보장)
+      try {
+        final remoteFolders = await cloud!.fetchFolders(userId);
+        final remoteTags = await cloud!.fetchTags(userId);
+        final remoteLinks = await cloud!.fetchLinks(userId);
+        await _mergeRemoteFolders(remoteFolders);
+        await _mergeRemoteTags(remoteTags);
+        await _mergeRemoteLinks(remoteLinks);
+        await refresh();
+      } catch (e) {
+        debugPrint('sync pull failed: $e');
+      }
 
-      await cloud!.upsertFolders(userId, localFolders);
-      await cloud!.upsertTags(userId, localTags);
-      await cloud!.upsertLinks(userId, localLinks);
+      // 2) 이후 로컬 변경을 push
+      try {
+        final localFolders = await repo.folders();
+        final localTags = await repo.tags();
+        final localLinks = await repo.links();
 
-      final remoteFolders = await cloud!.fetchFolders(userId);
-      final remoteTags = await cloud!.fetchTags(userId);
-      final remoteLinks = await cloud!.fetchLinks(userId);
-
-      await _mergeRemoteFolders(remoteFolders);
-      await _mergeRemoteTags(remoteTags);
-      await _mergeRemoteLinks(remoteLinks);
-      await refresh();
+        await cloud!.upsertFolders(userId, localFolders);
+        await cloud!.upsertTags(userId, localTags);
+        await cloud!.upsertLinks(userId, localLinks);
+      } catch (e) {
+        debugPrint('sync push failed: $e');
+      }
     } finally {
       if (!silent) state = state.copyWith(syncing: false);
     }
@@ -703,7 +721,7 @@ class AppController extends StateNotifier<AppState> {
       _bindAuthState();
       await refresh();
       if (user != null) {
-        await syncNow(silent: true);
+        await _syncOnLogin();
       }
       // 공유 링크는 비동기로 처리 (UI 블로킹 방지)
       _processSharedLinksInBackground();
