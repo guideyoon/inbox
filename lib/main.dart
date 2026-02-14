@@ -21,8 +21,18 @@ const _uuid = Uuid();
 const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
 const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 const _mobileAuthRedirectUri = 'urlinbox://login-callback/';
+const _defaultWebAuthRedirectUri = 'https://inbox-19g.pages.dev/';
+const _configuredWebAuthRedirectUri = String.fromEnvironment('WEB_AUTH_REDIRECT', defaultValue: _defaultWebAuthRedirectUri);
 
-String get _authRedirectUri => kIsWeb ? '${Uri.base.origin}/' : _mobileAuthRedirectUri;
+String get _authRedirectUri {
+  if (!kIsWeb) return _mobileAuthRedirectUri;
+
+  final candidate = _configuredWebAuthRedirectUri.trim();
+  if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+    return candidate.endsWith('/') ? candidate : '$candidate/';
+  }
+  return _defaultWebAuthRedirectUri;
+}
 
 bool get _cloudConfigured => _supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty;
 
