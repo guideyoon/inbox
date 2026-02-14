@@ -715,8 +715,9 @@ class AppController extends StateNotifier<AppState> {
   }
 
   void _triggerBackgroundSync() {
-    if (!state.signedIn) return;
-    unawaited(syncNow(silent: true));
+    final userId = _userId;
+    if (userId == null) return;
+    unawaited(syncNow(silent: true, forceUserId: userId));
   }
 
   Future<void> onAppResumed() async {
