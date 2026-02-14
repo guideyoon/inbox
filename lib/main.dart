@@ -553,12 +553,10 @@ class AppController extends StateNotifier<AppState> {
     _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((event) async {
       final user = event.session?.user;
       if (user != null) {
-        await repo.saveBool('guest_mode', false);
         state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
         await _syncOnLogin(user.id);
       } else {
-        final guestMode = await repo.getBool('guest_mode') ?? false;
-        state = state.copyWith(signedIn: false, userEmail: null, authGatePassed: guestMode);
+        state = state.copyWith(signedIn: false, userEmail: null, authGatePassed: false);
       }
     });
   }
@@ -591,12 +589,10 @@ class AppController extends StateNotifier<AppState> {
   Future<void> signOutCloud() async {
     if (!_cloudConfigured) return;
     await Supabase.instance.client.auth.signOut();
-    await repo.saveBool('guest_mode', false);
     state = state.copyWith(signedIn: false, userEmail: null, authGatePassed: false);
   }
 
   Future<void> continueWithoutLogin() async {
-    await repo.saveBool('guest_mode', true);
     state = state.copyWith(authGatePassed: true);
   }
 
@@ -733,7 +729,6 @@ class AppController extends StateNotifier<AppState> {
       if (!kIsWeb) {
         await reminder.init();
       }
-      final guestMode = await repo.getBool('guest_mode') ?? false;
       state = state.copyWith(
         loading: false,
         clipboardEnabled: await repo.getBool('clipboard_enabled') ?? true,
@@ -741,7 +736,7 @@ class AppController extends StateNotifier<AppState> {
         themeMode: _parseThemeMode(await repo.getString('theme_mode')),
         cloudConfigured: _cloudConfigured,
         signedIn: user != null,
-        authGatePassed: user != null || guestMode,
+        authGatePassed: user != null,
         userEmail: user?.email,
       );
       _bindAuthState();
@@ -2149,9 +2144,13 @@ class RootPage extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(
-          ['인박스', '검색', '컬렉션', '설정'][state.tab],
-          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 26),
+        toolbarHeight: 68,
+        title: Padding(
+          padding: const EdgeInsets.only(top: 2),
+          child: Text(
+            ['인박스', '검색', '컬렉션', '설정'][state.tab],
+            style: Theme.of(context).appBarTheme.titleTextStyle,
+          ),
         ),
         centerTitle: false,
         titleSpacing: 24,
@@ -2277,7 +2276,7 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
           ),
         SingleChildScrollView(
           scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: Row(
             children: [
               ChoiceChip(label: const Text('전체'), selected: state.filter == InboxFilter.all, onSelected: (_) => c.setFilter(InboxFilter.all)),
