@@ -22,7 +22,7 @@ const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
 const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 const _mobileAuthRedirectUri = 'urlinbox://login-callback/';
 
-String get _authRedirectUri => kIsWeb ? Uri.base.origin : _mobileAuthRedirectUri;
+String get _authRedirectUri => kIsWeb ? '${Uri.base.origin}/' : _mobileAuthRedirectUri;
 
 bool get _cloudConfigured => _supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty;
 
