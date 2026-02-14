@@ -108,6 +108,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun isAuthCallbackUrl(raw: String): Boolean {
+        if (raw.contains("login-callback", ignoreCase = true)) return true
         return try {
             val uri = Uri.parse(raw)
             uri.scheme.equals("urlinbox", ignoreCase = true) &&

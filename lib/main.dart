@@ -678,6 +678,7 @@ class AppController extends StateNotifier<AppState> {
     final byNormalized = {for (final e in current) e.normalizedUrl: e};
 
     for (final remoteItem in remote) {
+      if (_isAuthCallbackUrl(remoteItem.url)) continue;
       final localItem = byNormalized[remoteItem.normalizedUrl];
       if (localItem != null && !remoteItem.updatedAt.isAfter(localItem.updatedAt)) {
         continue;
@@ -775,8 +776,26 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> refresh() async {
-    state = state.copyWith(links: await repo.links(), tags: await repo.tags(), folders: await repo.folders());
+    final allLinks = await repo.links();
+    final badLinks = allLinks.where((e) => _isAuthCallbackUrl(e.url)).toList();
+    if (badLinks.isNotEmpty) {
+      await _cleanupAuthCallbackLinks(badLinks);
+    }
+    final links = (badLinks.isEmpty ? allLinks : await repo.links()).where((e) => !_isAuthCallbackUrl(e.url)).toList();
+    state = state.copyWith(links: links, tags: await repo.tags(), folders: await repo.folders());
     await _syncReminder();
+  }
+
+  Future<void> _cleanupAuthCallbackLinks(List<LinkItem> badLinks) async {
+    final userId = _userId;
+    for (final item in badLinks) {
+      await repo.delete(item.id);
+      if (cloud != null && userId != null) {
+        try {
+          await cloud!.markDeleted(userId, item.normalizedUrl);
+        } catch (_) {}
+      }
+    }
   }
 
   List<LinkItem> get inbox {
@@ -1275,8 +1294,9 @@ class CloudSyncService {
   }
 
   Future<void> upsertLinks(String userId, List<LinkItem> links) async {
-    if (links.isEmpty) return;
-    for (final e in links) {
+    final syncable = links.where((e) => !_isAuthCallbackUrl(e.url)).toList();
+    if (syncable.isEmpty) return;
+    for (final e in syncable) {
       final row = {
         'user_id': userId,
         'url': e.url,
@@ -1362,7 +1382,7 @@ class CloudSyncService {
       if (row['deleted_at'] != null) continue;
 
       final url = (row['url'] as String?) ?? '';
-      if (url.isEmpty) continue;
+      if (url.isEmpty || _isAuthCallbackUrl(url)) continue;
       final normalized = (row['normalized_url'] as String?) ?? _normalize(url);
       final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '') ?? DateTime.now();
       final updatedAt = DateTime.tryParse((row['updated_at'] as String?) ?? '') ?? createdAt;
