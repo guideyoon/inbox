@@ -1951,8 +1951,8 @@ class AuthEntryPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(appProvider);
     final c = ref.read(appProvider.notifier);
+    final cloudReady = _cloudConfigured;
 
     return Scaffold(
       body: SafeArea(
@@ -1970,7 +1970,7 @@ class AuthEntryPage extends ConsumerWidget {
                   const SizedBox(height: 8),
                   const Text('웹과 앱에서 같은 링크를 보려면 로그인하세요.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF8B95A1))),
                   const SizedBox(height: 24),
-                  if (!state.cloudConfigured)
+                  if (!cloudReady)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 12),
                       child: Text('클라우드 설정이 없어 로그인 기능이 비활성화되었습니다.', textAlign: TextAlign.center, style: TextStyle(color: Colors.orange)),
@@ -2641,7 +2641,7 @@ class SettingsPage extends ConsumerWidget {
           ),
           child: Column(
             children: [
-              if (!state.cloudConfigured)
+              if (!_cloudConfigured)
                 const ListTile(
                   leading: Icon(Icons.cloud_off_outlined),
                   title: Text('클라우드 비활성화'),
