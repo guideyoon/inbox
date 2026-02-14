@@ -13,13 +13,16 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi_web/sqflite_ffi_web.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:uuid/uuid.dart';
 
 const _uuid = Uuid();
-const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
+const _defaultSupabaseUrl = 'https://lcgvkyebcnkjwgptarax.supabase.co';
+const _defaultSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjZ3ZreWViY25randncHRhcmF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5ODg5OTMsImV4cCI6MjA4NjU2NDk5M30.UZeEQoqGB0fa6-S1a2YMTKawLS8vfXgjzSEbatdaUGU';
+const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: _defaultSupabaseUrl);
+const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: _defaultSupabaseAnonKey);
 const _mobileAuthRedirectUri = 'urlinbox://login-callback/';
 const _defaultWebAuthRedirectUri = 'https://inbox-19g.pages.dev/';
 const _configuredWebAuthRedirectUri = String.fromEnvironment('WEB_AUTH_REDIRECT', defaultValue: _defaultWebAuthRedirectUri);
@@ -34,10 +37,15 @@ String get _authRedirectUri {
   return _defaultWebAuthRedirectUri;
 }
 
-bool get _cloudConfigured => _supabaseUrl.isNotEmpty && _supabaseAnonKey.isNotEmpty;
+bool get _cloudConfigured =>
+    _supabaseUrl.startsWith('https://') &&
+    _supabaseAnonKey.isNotEmpty;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (kIsWeb) {
+    databaseFactory = databaseFactoryFfiWeb;
+  }
   if (_cloudConfigured) {
     await Supabase.initialize(url: _supabaseUrl, anonKey: _supabaseAnonKey);
   }
