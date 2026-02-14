@@ -760,6 +760,9 @@ class AppController extends StateNotifier<AppState> {
         userEmail: user?.email,
       );
       _bindAuthState();
+      if (user != null) {
+        await _syncOnLogin(user.id);
+      }
     }
   }
 
