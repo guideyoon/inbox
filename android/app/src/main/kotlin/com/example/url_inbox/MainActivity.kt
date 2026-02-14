@@ -84,7 +84,11 @@ class MainActivity : FlutterActivity() {
             }
 
             Intent.ACTION_VIEW -> {
-                intent.dataString?.let { sharedItems.add(mapOf("url" to it, "title" to "")) }
+                intent.dataString?.let {
+                    if (!isAuthCallbackUrl(it)) {
+                        sharedItems.add(mapOf("url" to it, "title" to ""))
+                    }
+                }
             }
         }
 
@@ -100,6 +104,16 @@ class MainActivity : FlutterActivity() {
                 return
             }
             intent.data = null
+        }
+    }
+
+    private fun isAuthCallbackUrl(raw: String): Boolean {
+        return try {
+            val uri = Uri.parse(raw)
+            uri.scheme.equals("urlinbox", ignoreCase = true) &&
+                uri.host.equals("login-callback", ignoreCase = true)
+        } catch (_: Exception) {
+            false
         }
     }
 

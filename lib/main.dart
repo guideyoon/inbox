@@ -810,9 +810,9 @@ class AppController extends StateNotifier<AppState> {
 
   Future<LinkItem?> addLink(String raw, {String? title, String? note, String? source}) async {
     final input = _sanitizeIncomingUrl(raw);
-    if (input.isEmpty) return null;
+    if (input.isEmpty || _isAuthCallbackUrl(input)) return null;
     final url = _withScheme(input);
-    if (!_isUrl(url)) return null;
+    if (!_isUrl(url) || _isAuthCallbackUrl(url)) return null;
     final normalized = _normalize(url);
     final existing = state.links.where((e) => e.normalizedUrl == normalized).firstOrNull;
     final meta = await Metadata.fetch(url);
@@ -3348,7 +3348,21 @@ String _sanitizeIncomingUrl(String value) {
 String _withScheme(String value) {
   final v = value.trim();
   final lower = v.toLowerCase();
-  return lower.startsWith('http://') || lower.startsWith('https://') ? v : 'https://$v';
+  if (lower.startsWith('http://') || lower.startsWith('https://')) return v;
+  if (RegExp(r'^[a-z][a-z0-9+.-]*://').hasMatch(lower)) return v;
+  return 'https://$v';
+}
+
+bool _isAuthCallbackUrl(String value) {
+  final raw = value.trim();
+  final lower = raw.toLowerCase();
+  if (lower.contains('login-callback')) return true;
+
+  final uri = Uri.tryParse(raw);
+  if (uri == null) return false;
+  if (uri.scheme == 'urlinbox' && uri.host == 'login-callback') return true;
+  if (uri.path.contains('/auth/v1/callback') && uri.queryParameters.containsKey('code')) return true;
+  return false;
 }
 
 String _normalize(String value) {
