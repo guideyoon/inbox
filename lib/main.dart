@@ -61,6 +61,7 @@ final cloudSyncProvider = Provider<CloudSyncService?>((_) {
 final appProvider = StateNotifierProvider<AppController, AppState>((ref) {
   return AppController(ref.read(repoProvider), ref.read(reminderProvider), ref.read(cloudSyncProvider));
 });
+final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 final routerProvider = Provider<GoRouter>((_) => GoRouter(
       initialLocation: '/',
       overridePlatformDefaultLocation: true,
@@ -289,6 +290,7 @@ class UrlInboxApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'URL Inbox',
       debugShowCheckedModeBanner: false,
+      scaffoldMessengerKey: _scaffoldMessengerKey,
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: themeMode,
@@ -578,11 +580,19 @@ class AppController extends StateNotifier<AppState> {
     );
   }
 
-  Future<void> sendMagicLink(String email) async {
+  Future<void> signUpWithEmail(String email, String password) async {
     if (!_cloudConfigured) return;
-    await Supabase.instance.client.auth.signInWithOtp(
+    await Supabase.instance.client.auth.signUp(
       email: email.trim(),
-      emailRedirectTo: _authRedirectUri,
+      password: password,
+    );
+  }
+
+  Future<void> signInWithEmail(String email, String password) async {
+    if (!_cloudConfigured) return;
+    await Supabase.instance.client.auth.signInWithPassword(
+      email: email.trim(),
+      password: password,
     );
   }
 
@@ -2107,14 +2117,39 @@ class AuthEntryPage extends ConsumerWidget {
                     const SizedBox(height: 10),
                     OutlinedButton.icon(
                       onPressed: () async {
-                        final email = await _showEmailInputDialog(context);
-                        if (email == null || email.isEmpty) return;
-                        await c.sendMagicLink(email);
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이메일로 로그인 링크를 보냈습니다.')));
+                        final input = await _showEmailPasswordDialog(
+                          context,
+                          title: '이메일 회원가입',
+                          submitLabel: '회원가입',
+                        );
+                        if (input == null) return;
+                        try {
+                          await c.signUpWithEmail(input.email, input.password);
+                          _showGlobalSnackBar('회원가입 요청을 보냈습니다. 이메일 인증 후 로그인해 주세요.');
+                        } catch (e) {
+                          _showGlobalSnackBar(_friendlyAuthError(e));
+                        }
                       },
-                      icon: const Icon(Icons.mark_email_read_outlined),
-                      label: const Text('이메일 로그인 링크 받기'),
+                      icon: const Icon(Icons.person_add_alt_1_rounded),
+                      label: const Text('이메일 회원가입'),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () async {
+                        final input = await _showEmailPasswordDialog(
+                          context,
+                          title: '이메일 로그인',
+                          submitLabel: '로그인',
+                        );
+                        if (input == null) return;
+                        try {
+                          await c.signInWithEmail(input.email, input.password);
+                        } catch (e) {
+                          _showGlobalSnackBar(_friendlyAuthError(e));
+                        }
+                      },
+                      icon: const Icon(Icons.login_rounded, size: 18),
+                      label: const Text('이메일로 로그인'),
                     ),
                     const SizedBox(height: 12),
                   ],
@@ -2803,14 +2838,38 @@ class SettingsPage extends ConsumerWidget {
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 if (!state.signedIn) ...[
                   ListTile(
-                    leading: const Icon(Icons.mark_email_read_outlined),
-                    title: const Text('이메일 매직링크 로그인'),
+                    leading: const Icon(Icons.person_add_alt_1_rounded),
+                    title: const Text('이메일 회원가입'),
                     onTap: () async {
-                      final email = await _showEmailInputDialog(context);
-                      if (email == null || email.isEmpty) return;
-                      await c.sendMagicLink(email);
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('이메일로 로그인 링크를 보냈습니다.')));
+                      final input = await _showEmailPasswordDialog(
+                        context,
+                        title: '이메일 회원가입',
+                        submitLabel: '회원가입',
+                      );
+                      if (input == null) return;
+                      try {
+                        await c.signUpWithEmail(input.email, input.password);
+                        _showGlobalSnackBar('회원가입 요청을 보냈습니다. 이메일 인증 후 로그인해 주세요.');
+                      } catch (e) {
+                        _showGlobalSnackBar(_friendlyAuthError(e));
+                      }
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.login_rounded),
+                    title: const Text('이메일 로그인'),
+                    onTap: () async {
+                      final input = await _showEmailPasswordDialog(
+                        context,
+                        title: '이메일 로그인',
+                        submitLabel: '로그인',
+                      );
+                      if (input == null) return;
+                      try {
+                        await c.signInWithEmail(input.email, input.password);
+                      } catch (e) {
+                        _showGlobalSnackBar(_friendlyAuthError(e));
+                      }
                     },
                   ),
                   ListTile(
@@ -3156,25 +3215,72 @@ Future<void> _showSaveSheet(BuildContext context, AppController c) async {
   );
 }
 
-Future<String?> _showEmailInputDialog(BuildContext context) async {
-  final controller = TextEditingController();
-  final result = await showDialog<String>(
+void _showGlobalSnackBar(String message) {
+  final messenger = _scaffoldMessengerKey.currentState;
+  if (messenger == null) return;
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(SnackBar(content: Text(message)));
+}
+
+String _friendlyAuthError(Object error) {
+  if (error is AuthException && error.message.trim().isNotEmpty) {
+    return error.message;
+  }
+  return '요청 처리 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.';
+}
+
+class _EmailPasswordInput {
+  const _EmailPasswordInput({required this.email, required this.password});
+
+  final String email;
+  final String password;
+}
+
+Future<_EmailPasswordInput?> _showEmailPasswordDialog(
+  BuildContext context, {
+  required String title,
+  required String submitLabel,
+}) async {
+  final emailController = TextEditingController();
+  final passwordController = TextEditingController();
+  final result = await showDialog<_EmailPasswordInput>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('이메일 로그인'),
-      content: TextField(
-        controller: controller,
-        keyboardType: TextInputType.emailAddress,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: 'you@example.com'),
+      title: Text(title),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: emailController,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'you@example.com'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(hintText: '비밀번호 (6자 이상)'),
+          ),
+        ],
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text.trim()), child: const Text('보내기')),
+        FilledButton(
+          onPressed: () {
+            final email = emailController.text.trim();
+            final password = passwordController.text;
+            if (email.isEmpty || password.isEmpty) return;
+            Navigator.pop(ctx, _EmailPasswordInput(email: email, password: password));
+          },
+          child: Text(submitLabel),
+        ),
       ],
     ),
   );
-  controller.dispose();
+  emailController.dispose();
+  passwordController.dispose();
   return result;
 }
 
