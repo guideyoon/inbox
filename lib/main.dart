@@ -632,6 +632,19 @@ class AppController extends StateNotifier<AppState> {
       } catch (e) {
         debugPrint('sync push failed: $e');
       }
+
+      // 3) push 이후 최종 pull로 서버 상태 동기화 확정
+      try {
+        final remoteFolders = await cloud!.fetchFolders(userId);
+        final remoteTags = await cloud!.fetchTags(userId);
+        final remoteLinks = await cloud!.fetchLinks(userId);
+        await _mergeRemoteFolders(remoteFolders);
+        await _mergeRemoteTags(remoteTags);
+        await _mergeRemoteLinks(remoteLinks);
+        await refresh();
+      } catch (e) {
+        debugPrint('sync final pull failed: $e');
+      }
     } finally {
       if (!silent) state = state.copyWith(syncing: false);
     }
@@ -1248,31 +1261,74 @@ class CloudSyncService {
 
   Future<void> upsertLinks(String userId, List<LinkItem> links) async {
     if (links.isEmpty) return;
-    final payload = links
-        .map((e) => {
-              'user_id': userId,
-              'url': e.url,
-              'normalized_url': e.normalizedUrl,
-              'title': e.title,
-              'description': e.description,
-              'image_url': e.imageUrl,
-              'domain': e.domain,
-              'favicon_url': e.faviconUrl,
-              'is_read': e.isRead,
-              'is_starred': e.isStarred,
-              'is_archived': e.isArchived,
-              'tags': e.tags,
-              'folder_id': e.folderId,
-              'note': e.note,
-              'source_app': e.sourceApp,
-              'last_opened_at': e.lastOpenedAt?.toIso8601String(),
-              'created_at': e.createdAt.toIso8601String(),
-              'updated_at': e.updatedAt.toIso8601String(),
-              'deleted_at': null,
-            })
-        .toList();
+    for (final e in links) {
+      final row = {
+        'user_id': userId,
+        'url': e.url,
+        'normalized_url': e.normalizedUrl,
+        'title': e.title,
+        'description': e.description,
+        'image_url': e.imageUrl,
+        'domain': e.domain,
+        'favicon_url': e.faviconUrl,
+        'is_read': e.isRead,
+        'is_starred': e.isStarred,
+        'is_archived': e.isArchived,
+        'tags': e.tags,
+        'folder_id': e.folderId,
+        'note': e.note,
+        'source_app': e.sourceApp,
+        'last_opened_at': e.lastOpenedAt?.toIso8601String(),
+        'created_at': e.createdAt.toIso8601String(),
+        'updated_at': e.updatedAt.toIso8601String(),
+        'deleted_at': null,
+      };
 
-    await client.from('links').upsert(payload, onConflict: 'user_id,normalized_url');
+      await _upsertLinkRow(row);
+    }
+  }
+
+  Future<void> _upsertLinkRow(Map<String, dynamic> row) async {
+    try {
+      await client.from('links').upsert(row, onConflict: 'user_id,normalized_url');
+      return;
+    } catch (_) {
+      // 제약/스키마 불일치 시 update+insert로 폴백
+    }
+
+    final baseRow = Map<String, dynamic>.from(row)..remove('created_at');
+
+    Future<bool> updateExisting(Map<String, dynamic> payload) async {
+      final updated = await client
+          .from('links')
+          .update(payload)
+          .eq('user_id', row['user_id'])
+          .eq('normalized_url', row['normalized_url'])
+          .select('id')
+          .limit(1);
+      return (updated as List).isNotEmpty;
+    }
+
+    try {
+      final exists = await updateExisting(baseRow);
+      if (!exists) {
+        await client.from('links').insert(row);
+      }
+      return;
+    } catch (_) {
+      // folder_id FK 문제 가능성 폴백
+    }
+
+    final noFolderRow = Map<String, dynamic>.from(baseRow)..['folder_id'] = null;
+    try {
+      final exists = await updateExisting(noFolderRow);
+      if (!exists) {
+        final insertRow = Map<String, dynamic>.from(row)..['folder_id'] = null;
+        await client.from('links').insert(insertRow);
+      }
+    } catch (e) {
+      debugPrint('link upsert fallback failed: $e');
+    }
   }
 
   Future<void> markDeleted(String userId, String normalizedUrl) async {
