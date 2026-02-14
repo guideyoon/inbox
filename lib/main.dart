@@ -61,7 +61,6 @@ final cloudSyncProvider = Provider<CloudSyncService?>((_) {
 final appProvider = StateNotifierProvider<AppController, AppState>((ref) {
   return AppController(ref.read(repoProvider), ref.read(reminderProvider), ref.read(cloudSyncProvider));
 });
-final _scaffoldMessengerKey = GlobalKey<ScaffoldMessengerState>();
 final routerProvider = Provider<GoRouter>((_) => GoRouter(
       initialLocation: '/',
       overridePlatformDefaultLocation: true,
@@ -290,7 +289,6 @@ class UrlInboxApp extends ConsumerWidget {
     return MaterialApp.router(
       title: 'URL Inbox',
       debugShowCheckedModeBanner: false,
-      scaffoldMessengerKey: _scaffoldMessengerKey,
       theme: lightTheme,
       darkTheme: darkTheme,
       themeMode: themeMode,
@@ -2120,9 +2118,14 @@ class AuthEntryPage extends ConsumerWidget {
                         final input = await _showEmailAuthDialog(context);
                         if (input == null) return;
                         try {
-                          await _submitEmailAuth(c, input);
+                          final mode = await _submitEmailAuth(c, input);
+                          if (mode == _EmailAuthMode.signUp) {
+                            if (!context.mounted) return;
+                            await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다.');
+                          }
                         } catch (e) {
-                          _showGlobalSnackBar(_friendlyAuthError(e));
+                          if (!context.mounted) return;
+                          await _showAuthErrorDialog(context, _friendlyAuthError(e));
                         }
                       },
                       icon: const Icon(Icons.login_rounded),
@@ -2822,9 +2825,14 @@ class SettingsPage extends ConsumerWidget {
                       final input = await _showEmailAuthDialog(context);
                       if (input == null) return;
                       try {
-                        await _submitEmailAuth(c, input);
+                        final mode = await _submitEmailAuth(c, input);
+                        if (mode == _EmailAuthMode.signUp) {
+                          if (!context.mounted) return;
+                          await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다.');
+                        }
                       } catch (e) {
-                        _showGlobalSnackBar(_friendlyAuthError(e));
+                        if (!context.mounted) return;
+                        await _showAuthErrorDialog(context, _friendlyAuthError(e));
                       }
                     },
                   ),
@@ -3171,12 +3179,32 @@ Future<void> _showSaveSheet(BuildContext context, AppController c) async {
   );
 }
 
-void _showGlobalSnackBar(String message) {
-  final messenger = _scaffoldMessengerKey.currentState;
-  if (messenger == null) return;
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(content: Text(message)));
+Future<void> _showAuthErrorDialog(BuildContext context, String message) async {
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('로그인 오류'),
+      content: Text(message),
+      actions: [
+        FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인')),
+      ],
+    ),
+  );
+}
+
+Future<void> _showAuthInfoDialog(BuildContext context, String message) async {
+  if (!context.mounted) return;
+  await showDialog<void>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('안내'),
+      content: Text(message),
+      actions: [
+        FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인')),
+      ],
+    ),
+  );
 }
 
 String _friendlyAuthError(Object error) {
@@ -3196,85 +3224,108 @@ class _EmailAuthInput {
   final _EmailAuthMode mode;
 }
 
-Future<void> _submitEmailAuth(AppController controller, _EmailAuthInput input) async {
+Future<_EmailAuthMode> _submitEmailAuth(AppController controller, _EmailAuthInput input) async {
   if (input.mode == _EmailAuthMode.signUp) {
     await controller.signUpWithEmail(input.email, input.password);
-    _showGlobalSnackBar('회원가입 요청을 보냈습니다. 이메일 인증 후 로그인해 주세요.');
-    return;
+    return _EmailAuthMode.signUp;
   }
   await controller.signInWithEmail(input.email, input.password);
+  return _EmailAuthMode.signIn;
 }
 
 Future<_EmailAuthInput?> _showEmailAuthDialog(
   BuildContext context, {
   _EmailAuthMode initialMode = _EmailAuthMode.signIn,
-}) async {
-  final emailController = TextEditingController();
-  final passwordController = TextEditingController();
-  var mode = initialMode;
-
-  final result = await showDialog<_EmailAuthInput>(
+}) {
+  return showDialog<_EmailAuthInput>(
     context: context,
-    builder: (ctx) => StatefulBuilder(
-      builder: (ctx, setState) {
-        final isSignUp = mode == _EmailAuthMode.signUp;
-        return AlertDialog(
-          title: Text(isSignUp ? '이메일 회원가입' : '이메일 로그인'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              SegmentedButton<_EmailAuthMode>(
-                segments: const [
-                  ButtonSegment<_EmailAuthMode>(value: _EmailAuthMode.signIn, label: Text('로그인')),
-                  ButtonSegment<_EmailAuthMode>(value: _EmailAuthMode.signUp, label: Text('회원가입')),
-                ],
-                selected: <_EmailAuthMode>{mode},
-                onSelectionChanged: (values) {
-                  if (values.isEmpty) return;
-                  setState(() => mode = values.first);
-                },
-                showSelectedIcon: false,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
-                autofocus: true,
-                decoration: const InputDecoration(hintText: 'you@example.com'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(hintText: '비밀번호 (6자 이상)'),
-              ),
-              if (isSignUp) ...[
-                const SizedBox(height: 8),
-                const Text('회원가입 후 인증 메일 확인이 필요할 수 있습니다.', style: TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-            FilledButton(
-              onPressed: () {
-                final email = emailController.text.trim();
-                final password = passwordController.text;
-                if (email.isEmpty || password.isEmpty) return;
-                Navigator.pop(ctx, _EmailAuthInput(email: email, password: password, mode: mode));
-              },
-              child: Text(isSignUp ? '회원가입' : '로그인'),
-            ),
-          ],
-        );
-      },
-    ),
+    builder: (_) => _EmailAuthDialog(initialMode: initialMode),
   );
+}
 
-  emailController.dispose();
-  passwordController.dispose();
-  return result;
+class _EmailAuthDialog extends StatefulWidget {
+  const _EmailAuthDialog({required this.initialMode});
+
+  final _EmailAuthMode initialMode;
+
+  @override
+  State<_EmailAuthDialog> createState() => _EmailAuthDialogState();
+}
+
+class _EmailAuthDialogState extends State<_EmailAuthDialog> {
+  late final TextEditingController _emailController;
+  late final TextEditingController _passwordController;
+  late _EmailAuthMode _mode;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController();
+    _passwordController = TextEditingController();
+    _mode = widget.initialMode;
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isSignUp = _mode == _EmailAuthMode.signUp;
+    return AlertDialog(
+      title: Text(isSignUp ? '이메일 회원가입' : '이메일 로그인'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SegmentedButton<_EmailAuthMode>(
+            segments: const [
+              ButtonSegment<_EmailAuthMode>(value: _EmailAuthMode.signIn, label: Text('로그인')),
+              ButtonSegment<_EmailAuthMode>(value: _EmailAuthMode.signUp, label: Text('회원가입')),
+            ],
+            selected: <_EmailAuthMode>{_mode},
+            onSelectionChanged: (values) {
+              if (values.isEmpty) return;
+              setState(() => _mode = values.first);
+            },
+            showSelectedIcon: false,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _emailController,
+            keyboardType: TextInputType.emailAddress,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'you@example.com'),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            decoration: const InputDecoration(hintText: '비밀번호 (6자 이상)'),
+          ),
+          if (isSignUp) ...[
+            const SizedBox(height: 8),
+            const Text('회원가입 후 인증 메일 확인이 필요할 수 있습니다.', style: TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        FilledButton(
+          onPressed: () {
+            final email = _emailController.text.trim();
+            final password = _passwordController.text;
+            if (email.isEmpty || password.isEmpty) return;
+            Navigator.pop(context, _EmailAuthInput(email: email, password: password, mode: _mode));
+          },
+          child: Text(isSignUp ? '회원가입' : '로그인'),
+        ),
+      ],
+    );
+  }
 }
 
 class _ManualSaveSheet extends StatefulWidget {
