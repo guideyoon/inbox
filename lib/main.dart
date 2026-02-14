@@ -665,10 +665,12 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> _init() async {
+    final user = _cloudConfigured ? Supabase.instance.client.auth.currentUser : null;
     try {
       await repo.init();
-      await reminder.init();
-      final user = _cloudConfigured ? Supabase.instance.client.auth.currentUser : null;
+      if (!kIsWeb) {
+        await reminder.init();
+      }
       final guestMode = await repo.getBool('guest_mode') ?? false;
       state = state.copyWith(
         loading: false,
@@ -689,7 +691,14 @@ class AppController extends StateNotifier<AppState> {
       _processSharedLinksInBackground();
     } catch (e) {
       // 초기화 실패 시에도 앱이 로드되도록 함
-      state = state.copyWith(loading: false);
+      state = state.copyWith(
+        loading: false,
+        cloudConfigured: _cloudConfigured,
+        signedIn: user != null,
+        authGatePassed: user != null,
+        userEmail: user?.email,
+      );
+      _bindAuthState();
     }
   }
 
@@ -952,6 +961,7 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> _syncReminder() async {
+    if (kIsWeb) return;
     if (!state.reminderEnabled) {
       return reminder.cancel();
     }
