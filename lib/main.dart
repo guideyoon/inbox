@@ -809,8 +809,9 @@ class AppController extends StateNotifier<AppState> {
   }
 
   List<LinkItem> get searched => state.links.where((e) {
-        final q = state.query.toLowerCase();
-        final queryOk = q.isEmpty ||
+        final q = state.query.trim().toLowerCase();
+        if (q.isEmpty) return false;
+        final queryOk =
             e.title.toLowerCase().contains(q) ||
             e.domain.toLowerCase().contains(q) ||
             e.note.toLowerCase().contains(q) ||
@@ -2154,6 +2155,14 @@ class RootPage extends ConsumerWidget {
         ),
         centerTitle: false,
         titleSpacing: 24,
+        actions: [
+          if (state.tab == 0)
+            IconButton(
+              tooltip: state.themeMode == ThemeMode.dark ? '라이트 모드로 전환' : '다크 모드로 전환',
+              onPressed: () => c.setThemeMode(state.themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark),
+              icon: Icon(state.themeMode == ThemeMode.dark ? Icons.wb_sunny_rounded : Icons.nightlight_round),
+            ),
+        ],
       ),
       body: switch (state.tab) {
         1 => const SearchPage(),
@@ -2393,6 +2402,15 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                                     ),
                                   ],
                                 ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                visualDensity: VisualDensity.compact,
+                                icon: Icon(
+                                  item.isStarred ? Icons.star_rounded : Icons.star_border_rounded,
+                                  color: item.isStarred ? Colors.amber : const Color(0xFF9AA4AF),
+                                ),
+                                onPressed: () => c.toggleStar(item),
                               ),
                             ],
                           ),
