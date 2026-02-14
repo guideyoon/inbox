@@ -799,7 +799,7 @@ class AppController extends StateNotifier<AppState> {
   }
 
   List<LinkItem> get inbox {
-    final base = state.links.where((e) => !e.isArchived).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final base = state.links.where((e) => !e.isArchived).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return switch (state.filter) {
       InboxFilter.unread => base.where((e) => !e.isRead).toList(),
       InboxFilter.starred => base.where((e) => e.isStarred).toList(),
@@ -826,7 +826,7 @@ class AppController extends StateNotifier<AppState> {
         };
         return queryOk && domainOk && tagOk && periodOk;
       }).toList()
-        ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   Future<LinkItem?> addLink(String raw, {String? title, String? note, String? source}) async {
     final input = _sanitizeIncomingUrl(raw);
@@ -2392,7 +2392,7 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                                         ],
                                         Expanded(
                                           child: Text(
-                                            '${item.domain} · ${_friendly(item.updatedAt)}${item.folderId != null ? ' · ${state.folders.where((f) => f.id == item.folderId).firstOrNull?.name ?? ''}' : ''}',
+                                            '${item.domain} · ${_friendly(item.createdAt)}${item.folderId != null ? ' · ${state.folders.where((f) => f.id == item.folderId).firstOrNull?.name ?? ''}' : ''}',
                                             style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
@@ -2429,7 +2429,7 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
     final List<dynamic> rows = [];
     String? lastHeader;
     for (final item in items) {
-      final header = _dateHeader(item.updatedAt);
+      final header = _dateHeader(item.createdAt);
       if (header != lastHeader) {
         rows.add(header);
         lastHeader = header;
@@ -2561,7 +2561,7 @@ class SearchPage extends ConsumerWidget {
                               ),
                             const SizedBox(height: 4),
                             Text(
-                              '${item.domain} · ${_friendly(item.updatedAt)}',
+                              '${item.domain} · ${_friendly(item.createdAt)}',
                               style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
                             ),
                           ],
@@ -3319,7 +3319,7 @@ class FolderLinksPage extends ConsumerWidget {
     final folder = state.folders.where((e) => e.id == id).firstOrNull;
     if (folder == null) return const Scaffold(body: Center(child: Text('폴더를 찾을 수 없습니다.')));
 
-    final items = state.links.where((e) => e.folderId == id).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    final items = state.links.where((e) => e.folderId == id).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
     return Scaffold(
       appBar: AppBar(title: Text('${folder.name} (${items.length})')),
@@ -3352,7 +3352,7 @@ class FolderLinksPage extends ConsumerWidget {
                   ),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('${item.domain} · ${_friendly(item.updatedAt)}', style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
+                    child: Text('${item.domain} · ${_friendly(item.createdAt)}', style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
                   ),
                   onTap: () => context.push('/detail/${item.id}'),
                 );
