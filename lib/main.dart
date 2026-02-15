@@ -789,6 +789,7 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> onAppResumed() async {
+    await ingestShared();
     await checkClipboard();
     _triggerBackgroundSync();
   }
@@ -968,10 +969,19 @@ class AppController extends StateNotifier<AppState> {
 
   Future<List<LinkItem>> ingestShared() async {
     final shared = await ShareBridge.consume();
+    final actionable = shared.where((item) {
+      final raw = (item['url'] as String?)?.trim() ?? '';
+      return raw.isNotEmpty && !_isAuthCallbackUrl(raw);
+    }).toList();
+
+    if (actionable.isNotEmpty && !state.authGatePassed) {
+      state = state.copyWith(authGatePassed: true);
+    }
+
     final needsEdit = <LinkItem>[];
-    for (final item in shared) {
-      final url = item['url'] as String;
-      final title = item['title'] as String?;
+    for (final item in actionable) {
+      final url = (item['url'] as String).trim();
+      final title = (item['title'] as String?)?.trim();
       final saved = await addLink(url, title: (title != null && title.isNotEmpty) ? title : null, source: 'shared');
       if (saved != null && (isGenericTitle(saved.title) || saved.title == saved.url || saved.title == saved.domain)) {
         needsEdit.add(saved);
@@ -2233,72 +2243,99 @@ class RootPage extends ConsumerWidget {
     if (state.loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (!state.authGatePassed) return const AuthEntryPage();
 
-    return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: 68,
-        title: Padding(
-          padding: const EdgeInsets.only(top: 2),
-          child: Text(
-            ['인박스', '검색', '컬렉션', '설정'][state.tab],
-            style: Theme.of(context).appBarTheme.titleTextStyle,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        final shouldExit = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('앱 종료'),
+            content: const Text('앱을 종료하시겠습니까?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('아니오'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('예'),
+              ),
+            ],
           ),
-        ),
-        centerTitle: false,
-        titleSpacing: 24,
-        actions: [
-          if (state.tab == 0)
-            IconButton(
-              tooltip: state.themeMode == ThemeMode.dark ? '라이트 모드로 전환' : '다크 모드로 전환',
-              onPressed: () => c.setThemeMode(state.themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark),
-              icon: Icon(state.themeMode == ThemeMode.dark ? Icons.wb_sunny_rounded : Icons.nightlight_round),
-            ),
-        ],
-      ),
-      body: switch (state.tab) {
-        1 => const SearchPage(),
-        2 => const CollectionPage(),
-        3 => const SettingsPage(),
-        _ => const InboxPage(),
+        );
+
+        if (shouldExit == true && context.mounted) {
+          SystemNavigator.pop();
+        }
       },
-      floatingActionButton: state.tab == 0
-          ? FloatingActionButton.extended(
-              onPressed: () => _showSaveSheet(context, c),
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('링크 추가', style: TextStyle(fontWeight: FontWeight.bold)),
-              elevation: 0,
-              highlightElevation: 0,
-            )
-          : null,
-      bottomNavigationBar: Container(
-        decoration: BoxDecoration(
-          border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-        ),
-        child: NavigationBar(
-          selectedIndex: state.tab,
-          onDestinationSelected: c.setTab,
-          backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.inbox_outlined),
-              selectedIcon: Icon(Icons.inbox_rounded),
-              label: '인박스',
+      child: Scaffold(
+        appBar: AppBar(
+          toolbarHeight: 68,
+          title: Padding(
+            padding: const EdgeInsets.only(top: 2),
+            child: Text(
+              ['인박스', '검색', '컬렉션', '설정'][state.tab],
+              style: Theme.of(context).appBarTheme.titleTextStyle,
             ),
-            NavigationDestination(
-              icon: Icon(Icons.search_outlined),
-              selectedIcon: Icon(Icons.search_rounded),
-              label: '검색',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.folder_open_outlined),
-              selectedIcon: Icon(Icons.folder_rounded),
-              label: '컬렉션',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.settings_outlined),
-              selectedIcon: Icon(Icons.settings_rounded),
-              label: '설정',
-            ),
+          ),
+          centerTitle: false,
+          titleSpacing: 24,
+          actions: [
+            if (state.tab == 0)
+              IconButton(
+                tooltip: state.themeMode == ThemeMode.dark ? '라이트 모드로 전환' : '다크 모드로 전환',
+                onPressed: () => c.setThemeMode(state.themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark),
+                icon: Icon(state.themeMode == ThemeMode.dark ? Icons.wb_sunny_rounded : Icons.nightlight_round),
+              ),
           ],
+        ),
+        body: switch (state.tab) {
+          1 => const SearchPage(),
+          2 => const CollectionPage(),
+          3 => const SettingsPage(),
+          _ => const InboxPage(),
+        },
+        floatingActionButton: state.tab == 0
+            ? FloatingActionButton.extended(
+                onPressed: () => _showSaveSheet(context, c),
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('링크 추가', style: TextStyle(fontWeight: FontWeight.bold)),
+                elevation: 0,
+                highlightElevation: 0,
+              )
+            : null,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+          ),
+          child: NavigationBar(
+            selectedIndex: state.tab,
+            onDestinationSelected: c.setTab,
+            backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+            destinations: const [
+              NavigationDestination(
+                icon: Icon(Icons.inbox_outlined),
+                selectedIcon: Icon(Icons.inbox_rounded),
+                label: '인박스',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.search_outlined),
+                selectedIcon: Icon(Icons.search_rounded),
+                label: '검색',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.folder_open_outlined),
+                selectedIcon: Icon(Icons.folder_rounded),
+                label: '컬렉션',
+              ),
+              NavigationDestination(
+                icon: Icon(Icons.settings_outlined),
+                selectedIcon: Icon(Icons.settings_rounded),
+                label: '설정',
+              ),
+            ],
+          ),
         ),
       ),
     );
