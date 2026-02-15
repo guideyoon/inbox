@@ -2014,25 +2014,31 @@ class Metadata {
   static bool _isNotBlank(String? value) => value != null && value.trim().isNotEmpty;
 
   static List<String> _extractThreadMediaUrlsFromDocument(dynamic doc, Uri baseUrl, String? previewImage) {
-    final candidates = _firstImageCandidatesFromSelectors(doc, const [
+    final selectorCandidates = _firstImageCandidatesFromSelectors(doc, const [
       'article img',
       'main img',
       '[role="main"] img',
       '[data-pressable-container] img',
       '[data-pressable-container] picture img',
       '.x1lliihq img',
-    ]).map((raw) => baseUrl.resolve(raw).toString()).toList();
+    ]).map((raw) => baseUrl.resolve(raw).toString());
 
-    final preview = previewImage?.trim();
+    final metaCandidates = _threadMediaFromMeta(doc, baseUrl);
+    final scriptCandidates = _threadMediaFromScripts(doc, baseUrl);
     final filtered = <String>[];
-    for (final url in candidates) {
+    for (final url in [...metaCandidates, ...selectorCandidates, ...scriptCandidates]) {
       final lower = url.toLowerCase();
       if (!lower.startsWith('http://') && !lower.startsWith('https://')) continue;
-      if (lower.contains('profile_pic') || lower.contains('avatar') || lower.contains('emoji')) continue;
-      if (preview != null && preview.isNotEmpty && url == preview) continue;
+      if (_isLikelyNonContentImage(lower)) continue;
       filtered.add(url);
     }
-    return _mergeUniqueUrls([], filtered);
+
+    final merged = _mergeUniqueUrls([], filtered);
+    final preview = previewImage == null ? null : baseUrl.resolve(previewImage).toString();
+    if (preview != null && preview.isNotEmpty && !_isLikelyNonContentImage(preview.toLowerCase())) {
+      return _mergeUniqueUrls([preview], merged);
+    }
+    return merged;
   }
 
   static List<String> _firstImageCandidatesFromSelectors(dynamic doc, List<String> selectors) {
@@ -2052,6 +2058,68 @@ class Metadata {
       }
     }
     return out;
+  }
+
+  static List<String> _threadMediaFromMeta(dynamic doc, Uri baseUrl) {
+    final out = <String>[];
+    final seen = <String>{};
+    const selectors = [
+      'meta[property="og:image"]',
+      'meta[name="og:image"]',
+      'meta[property="twitter:image"]',
+      'meta[name="twitter:image"]',
+      'meta[property="og:video"]',
+      'meta[property="og:video:url"]',
+      'meta[property="twitter:player:stream"]',
+      'meta[name="twitter:player:stream"]',
+    ];
+    for (final selector in selectors) {
+      for (final element in doc.querySelectorAll(selector)) {
+        final raw = _normalizeText(element.attributes['content']);
+        if (raw == null || raw.startsWith('data:')) continue;
+        final resolved = baseUrl.resolve(raw).toString();
+        if (seen.add(resolved)) out.add(resolved);
+      }
+    }
+    return out;
+  }
+
+  static List<String> _threadMediaFromScripts(dynamic doc, Uri baseUrl) {
+    final out = <String>[];
+    final seen = <String>{};
+    final mediaRegex = RegExp(
+      r'''https?:\\?/\\?/[^\\s"'<>]+?\.(?:jpg|jpeg|png|webp|gif|mp4)(?:\\?[^\\s"'<>]*)?''',
+      caseSensitive: false,
+    );
+
+    for (final script in doc.querySelectorAll('script')) {
+      final text = script.text;
+      if (text.trim().isEmpty) continue;
+      for (final match in mediaRegex.allMatches(text)) {
+        final raw = match.group(0);
+        if (raw == null || raw.isEmpty) continue;
+
+        final normalized = raw
+            .replaceAll(r'\/', '/')
+            .replaceAll(r'\u002F', '/')
+            .replaceAll(r'\u0026', '&')
+            .replaceAll('&amp;', '&');
+        final resolved = baseUrl.resolve(normalized).toString();
+        if (seen.add(resolved)) out.add(resolved);
+      }
+    }
+    return out;
+  }
+
+  static bool _isLikelyNonContentImage(String lowerUrl) {
+    if (lowerUrl.contains('profile_pic')) return true;
+    if (lowerUrl.contains('avatar')) return true;
+    if (lowerUrl.contains('emoji')) return true;
+    if (lowerUrl.contains('default_profile')) return true;
+    if (lowerUrl.contains('icon-ios')) return true;
+    if (lowerUrl.contains('spacer') || lowerUrl.contains('blank')) return true;
+    if (lowerUrl.endsWith('/favicon.ico')) return true;
+    return false;
   }
 
   static bool _isThreadsDomain(String host) {
@@ -3301,7 +3369,7 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     final profileImageUrl = profileImageRaw == null ? null : _webImageUrlForUi(profileImageRaw);
     final mediaUrls = isXLink
         ? _mergeMediaForUi(xMediaUrls)
-        : (isThreadsLink ? _mergeMediaForUi(link.mediaUrls) : _mergeMediaForUi(const [], fallback: link.imageUrl));
+        : (isThreadsLink ? _mergeMediaForUi(link.mediaUrls, fallback: link.imageUrl) : _mergeMediaForUi(const [], fallback: link.imageUrl));
 
     return Scaffold(
       appBar: AppBar(
@@ -3824,6 +3892,7 @@ class FolderLinksPage extends ConsumerWidget {
               separatorBuilder: (_, __) => const Divider(height: 1),
               itemBuilder: (_, i) {
                 final item = items[i];
+                final thumbUrl = _inboxThumbUrl(item);
                 return ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                   leading: Container(
@@ -3832,9 +3901,9 @@ class FolderLinksPage extends ConsumerWidget {
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(10),
-                      image: item.imageUrl.isNotEmpty ? DecorationImage(image: NetworkImage(item.imageUrl), fit: BoxFit.cover) : null,
+                      image: thumbUrl != null ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover) : null,
                     ),
-                    child: item.imageUrl.isEmpty
+                    child: thumbUrl == null
                         ? Center(child: Text(item.domain.isEmpty ? '?' : item.domain[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))
                         : null,
                   ),
@@ -3874,7 +3943,33 @@ String _sanitizeIncomingUrl(String value) {
   while (v.isNotEmpty && '([<{"\''.contains(v[0])) {
     v = v.substring(1).trimLeft();
   }
-  return v;
+  return _unwrapSocialRedirectUrl(v);
+}
+
+String _unwrapSocialRedirectUrl(String value) {
+  final uri = Uri.tryParse(value);
+  if (uri == null) return value;
+
+  final host = uri.host.toLowerCase();
+  String? target;
+
+  if ((host == 'l.instagram.com' || host.endsWith('.l.instagram.com')) && uri.queryParameters.containsKey('u')) {
+    target = uri.queryParameters['u'];
+  }
+
+  if ((host == 'l.facebook.com' || host == 'lm.facebook.com' || host.endsWith('.facebook.com')) && uri.path.toLowerCase() == '/l.php') {
+    target ??= uri.queryParameters['u'];
+    target ??= uri.queryParameters['href'];
+  }
+
+  final candidate = target?.trim();
+  if (candidate == null || candidate.isEmpty) return value;
+
+  final decoded = Uri.decodeFull(candidate).trim();
+  if (decoded.startsWith('http://') || decoded.startsWith('https://')) {
+    return decoded;
+  }
+  return value;
 }
 
 String _withScheme(String value) {
@@ -4014,7 +4109,9 @@ bool _isXDomainForUi(String domain) {
 String? _inboxThumbUrl(LinkItem item) {
   final source = _isXDomainForUi(item.domain)
       ? _firstHttpUrl([item.faviconUrl, item.imageUrl])
-      : _firstHttpUrl([item.imageUrl, item.faviconUrl]);
+      : (_isThreadsDomainForUi(item.domain)
+          ? _firstHttpUrl([item.imageUrl, item.mediaUrls.firstOrNull, item.faviconUrl])
+          : _firstHttpUrl([item.imageUrl, item.faviconUrl]));
   if (source == null) return null;
   return _webImageUrlForUi(source);
 }
