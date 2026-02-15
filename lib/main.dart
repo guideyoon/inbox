@@ -879,6 +879,48 @@ class AppController extends StateNotifier<AppState> {
     };
   }
 
+  List<LinkItem> get todayPicks {
+    final now = DateTime.now();
+    final candidates = state.links.where((e) => !e.isArchived).toList();
+    candidates.sort((a, b) => _readPriorityScore(b, now).compareTo(_readPriorityScore(a, now)));
+    return candidates.take(5).toList();
+  }
+
+  double _readPriorityScore(LinkItem item, DateTime now) {
+    var score = 0.0;
+
+    if (!item.isRead) {
+      score += 6;
+    } else {
+      score += 1;
+    }
+
+    if (item.isStarred) {
+      score += 3;
+    }
+
+    final ageDays = now.difference(item.createdAt).inDays;
+    if (ageDays <= 2) {
+      score += 2;
+    } else if (ageDays <= 7) {
+      score += 1;
+    } else if (ageDays > 30) {
+      score -= 0.5;
+    }
+
+    if (item.lastOpenedAt == null) {
+      score += 1;
+    } else if (now.difference(item.lastOpenedAt!).inDays >= 14) {
+      score += 1;
+    }
+
+    if (item.note.trim().isNotEmpty) {
+      score += 0.5;
+    }
+
+    return score;
+  }
+
   List<LinkItem> get searched => state.links.where((e) {
         final q = state.query.trim().toLowerCase();
         if (q.isEmpty) return false;
@@ -2373,6 +2415,7 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
     final c = ref.read(appProvider.notifier);
     final items = c.inbox;
     final grouped = _groupItems(items);
+    final picks = c.todayPicks;
 
     return Column(
       children: [
@@ -2399,6 +2442,61 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                 ),
                 TextButton(onPressed: c.saveCandidate, child: const Text('저장')),
                 IconButton(onPressed: c.dismissCandidate, icon: const Icon(Icons.close, size: 18)),
+              ],
+            ),
+          ),
+        if (state.filter == InboxFilter.all && picks.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('오늘 읽을 5개', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 8),
+                SizedBox(
+                  height: 94,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: picks.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (_, i) {
+                      final item = picks[i];
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(14),
+                        onTap: () => context.push('/detail/${item.id}'),
+                        child: Container(
+                          width: 220,
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _dashboardTitle(item),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w700,
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                '${item.domain} · ${_friendly(item.createdAt)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF8B95A1)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
               ],
             ),
           ),
@@ -3668,9 +3766,76 @@ bool _isAuthCallbackUrl(String value) {
 }
 
 String _normalize(String value) {
-  final uri = Uri.parse(_withScheme(value));
-  final q = Map.of(uri.queryParameters)..removeWhere((k, _) => k.startsWith('utm_') || k == 'gclid' || k == 'fbclid');
-  return Uri(scheme: uri.scheme.toLowerCase(), host: uri.host.toLowerCase(), path: uri.path.isEmpty ? '/' : uri.path, queryParameters: q.isEmpty ? null : q).toString();
+  var uri = Uri.parse(_withScheme(value.trim()));
+  var host = _canonicalHost(uri.host);
+
+  if (host == 'youtu.be') {
+    final videoId = uri.pathSegments.where((e) => e.isNotEmpty).firstOrNull;
+    if (videoId != null && videoId.isNotEmpty) {
+      final nextQuery = <String, String>{'v': videoId, ...uri.queryParameters};
+      uri = uri.replace(host: 'youtube.com', path: '/watch', queryParameters: nextQuery);
+      host = 'youtube.com';
+    }
+  }
+
+  final normalizedQuery = <String, String>{};
+  final sortedKeys = uri.queryParameters.keys.toList()..sort();
+  for (final key in sortedKeys) {
+    if (_isTrackingQueryKey(key)) continue;
+    final cleaned = uri.queryParameters[key]?.trim();
+    if (cleaned == null || cleaned.isEmpty) continue;
+    normalizedQuery[key] = cleaned;
+  }
+
+  return Uri(
+    scheme: uri.scheme.toLowerCase(),
+    host: host,
+    path: _canonicalPath(uri.path),
+    queryParameters: normalizedQuery.isEmpty ? null : normalizedQuery,
+  ).toString();
+}
+
+String _canonicalHost(String host) {
+  var v = host.toLowerCase().trim();
+  if (v.startsWith('www.')) v = v.substring(4);
+
+  switch (v) {
+    case 'mobile.twitter.com':
+    case 'twitter.com':
+    case 'm.x.com':
+      return 'x.com';
+    case 'm.instagram.com':
+      return 'instagram.com';
+    case 'm.facebook.com':
+      return 'facebook.com';
+    case 'm.youtube.com':
+    case 'music.youtube.com':
+      return 'youtube.com';
+    default:
+      return v;
+  }
+}
+
+String _canonicalPath(String path) {
+  if (path.isEmpty) return '/';
+  var normalized = path.replaceAll(RegExp(r'/+'), '/');
+  if (normalized.length > 1 && normalized.endsWith('/')) {
+    normalized = normalized.substring(0, normalized.length - 1);
+  }
+  return normalized;
+}
+
+bool _isTrackingQueryKey(String key) {
+  final k = key.toLowerCase();
+  if (k.startsWith('utm_')) return true;
+  return {
+    'gclid',
+    'fbclid',
+    'igshid',
+    'mc_cid',
+    'mc_eid',
+    'si',
+  }.contains(k);
 }
 
 String _domainTag(String domain) {
