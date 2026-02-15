@@ -804,7 +804,7 @@ class AppController extends StateNotifier<AppState> {
       note: remote.note,
       sourceApp: remote.sourceApp,
       lastOpenedAt: remote.lastOpenedAt,
-      mediaUrls: local?.mediaUrls ?? const [],
+      mediaUrls: remote.mediaUrls.isNotEmpty ? remote.mediaUrls : (local?.mediaUrls ?? const []),
     );
   }
 
@@ -1476,6 +1476,7 @@ class CloudSyncService {
         'note': e.note,
         'source_app': e.sourceApp,
         'last_opened_at': e.lastOpenedAt?.toIso8601String(),
+        'media_urls': e.mediaUrls,
         'created_at': e.createdAt.toIso8601String(),
         'updated_at': e.updatedAt.toIso8601String(),
         'deleted_at': null,
@@ -1568,7 +1569,7 @@ class CloudSyncService {
         note: (row['note'] as String?) ?? '',
         sourceApp: row['source_app'] as String?,
         lastOpenedAt: DateTime.tryParse((row['last_opened_at'] as String?) ?? ''),
-        mediaUrls: const [],
+        mediaUrls: _toMediaUrls(row['media_urls']),
       ));
     }
     return out;
@@ -1586,7 +1587,36 @@ class CloudSyncService {
       return value.map((e) => '$e').where((e) => e.isNotEmpty).toList();
     }
     if (value is String) {
-      return value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return const [];
+      if (trimmed.startsWith('[')) {
+        try {
+          final decoded = jsonDecode(trimmed);
+          if (decoded is List) {
+            return decoded.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+          }
+        } catch (_) {}
+      }
+      return trimmed.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return const [];
+  }
+
+  List<String> _toMediaUrls(dynamic value) {
+    if (value is List) {
+      return value.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+    }
+    if (value is String) {
+      final trimmed = value.trim();
+      if (trimmed.isEmpty) return const [];
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is List) {
+          return decoded.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+        }
+      } catch (_) {
+        return trimmed.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      }
     }
     return const [];
   }
