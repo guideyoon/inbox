@@ -2124,7 +2124,7 @@ class Metadata {
 
   static bool _isThreadsDomain(String host) {
     final h = host.toLowerCase();
-    return h == 'threads.net' || h.endsWith('.threads.net');
+    return h == 'threads.net' || h.endsWith('.threads.net') || h == 'threads.com' || h.endsWith('.threads.com');
   }
 
   static bool _isXDomain(String host) {
@@ -4067,7 +4067,7 @@ bool _isTrackingQueryKey(String key) {
 
 String _domainTag(String domain) {
   if (domain.contains('x.com') || domain.contains('twitter.com')) return '트위터';
-  if (domain.contains('threads.net')) return '스레드';
+  if (domain.contains('threads.net') || domain.contains('threads.com')) return '스레드';
   if (domain.contains('youtube.com') || domain.contains('youtu.be')) return '유튜브';
   return domain;
 }
@@ -4098,7 +4098,7 @@ bool _isInstagramDomain(String domain) {
 
 bool _isThreadsDomainForUi(String domain) {
   final d = domain.toLowerCase();
-  return d.contains('threads.net');
+  return d.contains('threads.net') || d.contains('threads.com');
 }
 
 bool _isXDomainForUi(String domain) {

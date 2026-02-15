@@ -162,7 +162,12 @@ class MainActivity : FlutterActivity() {
             cleaned.startsWith("www.x.com/", ignoreCase = true) ||
             cleaned.startsWith("www.twitter.com/", ignoreCase = true)
 
-        return if (isXLike) "https://$cleaned" else null
+        val isThreadsLike = cleaned.startsWith("threads.net/", ignoreCase = true) ||
+            cleaned.startsWith("www.threads.net/", ignoreCase = true) ||
+            cleaned.startsWith("threads.com/", ignoreCase = true) ||
+            cleaned.startsWith("www.threads.com/", ignoreCase = true)
+
+        return if (isXLike || isThreadsLike) "https://$cleaned" else null
     }
 
     private fun extractBestTitle(text: String, url: String, subject: String): String {
