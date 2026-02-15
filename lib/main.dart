@@ -2873,6 +2873,7 @@ class SearchPage extends ConsumerWidget {
                     separatorBuilder: (_, __) => const Divider(height: 1),
                     itemBuilder: (_, i) {
                       final item = result[i];
+                      final thumbUrl = _inboxThumbUrl(item);
                       return ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                         leading: Container(
@@ -2881,9 +2882,9 @@ class SearchPage extends ConsumerWidget {
                           decoration: BoxDecoration(
                             color: Colors.grey[100],
                             borderRadius: BorderRadius.circular(10),
-                            image: item.imageUrl.isNotEmpty ? DecorationImage(image: NetworkImage(item.imageUrl), fit: BoxFit.cover) : null,
+                            image: thumbUrl != null ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover) : null,
                           ),
-                          child: item.imageUrl.isEmpty
+                          child: thumbUrl == null
                               ? Center(child: Text(item.domain.isEmpty ? '?' : item.domain[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))
                               : null,
                         ),
@@ -3296,7 +3297,8 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     if (link == null) return const Scaffold(body: Center(child: Text('링크 없음')));
     final isXLink = _isXDomainForUi(link.domain);
     final isThreadsLink = _isThreadsDomainForUi(link.domain);
-    final profileImageUrl = _firstHttpUrl([xProfileImageUrl, link.faviconUrl]);
+    final profileImageRaw = _firstHttpUrl([xProfileImageUrl, link.faviconUrl]);
+    final profileImageUrl = profileImageRaw == null ? null : _webImageUrlForUi(profileImageRaw);
     final mediaUrls = isXLink
         ? _mergeMediaForUi(xMediaUrls)
         : (isThreadsLink ? _mergeMediaForUi(link.mediaUrls) : _mergeMediaForUi(const [], fallback: link.imageUrl));
@@ -4010,10 +4012,11 @@ bool _isXDomainForUi(String domain) {
 }
 
 String? _inboxThumbUrl(LinkItem item) {
-  if (_isXDomainForUi(item.domain)) {
-    return _firstHttpUrl([item.faviconUrl, item.imageUrl]);
-  }
-  return _firstHttpUrl([item.imageUrl, item.faviconUrl]);
+  final source = _isXDomainForUi(item.domain)
+      ? _firstHttpUrl([item.faviconUrl, item.imageUrl])
+      : _firstHttpUrl([item.imageUrl, item.faviconUrl]);
+  if (source == null) return null;
+  return _webImageUrlForUi(source);
 }
 
 String? _firstHttpUrl(Iterable<String?> urls) {
@@ -4031,9 +4034,39 @@ List<String> _mergeMediaForUi(Iterable<String> mediaUrls, {String? fallback}) {
   for (final raw in [...mediaUrls, if (fallback != null && fallback.trim().isNotEmpty) fallback.trim()]) {
     if (raw.isEmpty) continue;
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) continue;
-    if (seen.add(raw)) out.add(raw);
+    final resolved = _webImageUrlForUi(raw);
+    if (seen.add(resolved)) out.add(resolved);
   }
   return out;
+}
+
+String _webImageUrlForUi(String rawUrl) {
+  final value = rawUrl.trim();
+  if (!kIsWeb || value.isEmpty) return value;
+
+  final uri = Uri.tryParse(value);
+  if (uri == null) return value;
+  final host = uri.host.toLowerCase();
+  if (host == 'images.weserv.nl') return value;
+
+  if (!_needsWebImageProxy(host, value.toLowerCase())) {
+    return value;
+  }
+
+  final sourceWithoutScheme = value.replaceFirst(RegExp(r'^https?://'), '');
+  return Uri.https('images.weserv.nl', '/', {
+    'url': sourceWithoutScheme,
+    'output': 'webp',
+    'q': '85',
+  }).toString();
+}
+
+bool _needsWebImageProxy(String host, String lowerUrl) {
+  if (_isThreadsDomainForUi(host)) return true;
+  if (host.contains('instagram.com') || host.contains('cdninstagram.com')) return true;
+  if (host.contains('fbcdn.net')) return true;
+  if (lowerUrl.contains('lookaside.instagram.com')) return true;
+  return false;
 }
 
 bool _isLikelyVideoMediaUrl(String url) {
