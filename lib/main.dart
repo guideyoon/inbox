@@ -321,6 +321,7 @@ class LinkItem {
     this.folderId,
     this.sourceApp,
     this.lastOpenedAt,
+    this.mediaUrls = const [],
   });
 
   final String id;
@@ -341,8 +342,9 @@ class LinkItem {
   final String note;
   final String? sourceApp;
   final DateTime? lastOpenedAt;
+  final List<String> mediaUrls;
 
-  LinkItem copyWith({bool? isRead, bool? isStarred, bool? isArchived, String? note, String? folderId, List<String>? tags, DateTime? updatedAt, DateTime? lastOpenedAt, String? title, String? description, String? imageUrl, String? faviconUrl}) {
+  LinkItem copyWith({bool? isRead, bool? isStarred, bool? isArchived, String? note, String? folderId, List<String>? tags, DateTime? updatedAt, DateTime? lastOpenedAt, String? title, String? description, String? imageUrl, String? faviconUrl, List<String>? mediaUrls}) {
     return LinkItem(
       id: id,
       url: url,
@@ -362,6 +364,7 @@ class LinkItem {
       note: note ?? this.note,
       sourceApp: sourceApp,
       lastOpenedAt: lastOpenedAt ?? this.lastOpenedAt,
+      mediaUrls: mediaUrls ?? this.mediaUrls,
     );
   }
 
@@ -384,6 +387,7 @@ class LinkItem {
         'note': note,
         'source_app': sourceApp,
         'last_opened_at': lastOpenedAt?.toIso8601String(),
+        'media_urls': jsonEncode(mediaUrls),
       };
 
   factory LinkItem.fromMap(Map<String, Object?> m) => LinkItem(
@@ -405,7 +409,28 @@ class LinkItem {
         note: (m['note'] as String?) ?? '',
         sourceApp: m['source_app'] as String?,
         lastOpenedAt: (m['last_opened_at'] as String?) == null ? null : DateTime.parse(m['last_opened_at'] as String),
+        mediaUrls: _parseMediaUrls(m['media_urls']),
       );
+
+  static List<String> _parseMediaUrls(Object? raw) {
+    if (raw == null) return const [];
+    if (raw is String) {
+      final value = raw.trim();
+      if (value.isEmpty) return const [];
+      try {
+        final decoded = jsonDecode(value);
+        if (decoded is List) {
+          return decoded.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+        }
+      } catch (_) {
+        return value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      }
+    }
+    if (raw is List) {
+      return raw.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+    }
+    return const [];
+  }
 }
 
 class TagItem { const TagItem({required this.id, required this.name}); final String id; final String name; }
@@ -779,6 +804,7 @@ class AppController extends StateNotifier<AppState> {
       note: remote.note,
       sourceApp: remote.sourceApp,
       lastOpenedAt: remote.lastOpenedAt,
+      mediaUrls: local?.mediaUrls ?? const [],
     );
   }
 
@@ -949,7 +975,8 @@ class AppController extends StateNotifier<AppState> {
     final normalized = _normalize(url);
     final existing = state.links.where((e) => e.normalizedUrl == normalized).firstOrNull;
     final meta = await Metadata.fetch(url);
-    final primaryMedia = meta.mediaUrls.firstOrNull ?? meta.image;
+    final previewImage = meta.image ?? meta.mediaUrls.firstOrNull;
+    final bodyMediaUrls = meta.mediaUrls;
     final now = DateTime.now();
     final autoTag = _domainTag(meta.domain);
 
@@ -959,8 +986,9 @@ class AppController extends StateNotifier<AppState> {
       savedItem = existing.copyWith(
         title: title ?? meta.title ?? existing.title,
         description: meta.description ?? existing.description,
-        imageUrl: primaryMedia ?? existing.imageUrl,
+        imageUrl: previewImage ?? existing.imageUrl,
         faviconUrl: meta.profileImage ?? (existing.faviconUrl.isEmpty ? meta.favicon : existing.faviconUrl),
+        mediaUrls: bodyMediaUrls.isEmpty ? existing.mediaUrls : bodyMediaUrls,
         note: (note == null || note.isEmpty) ? existing.note : note,
         tags: {...existing.tags, autoTag}.toList(),
         updatedAt: now,
@@ -974,7 +1002,7 @@ class AppController extends StateNotifier<AppState> {
         normalizedUrl: normalized,
         title: title ?? meta.title ?? url,
         description: meta.description ?? '',
-        imageUrl: primaryMedia ?? '',
+        imageUrl: previewImage ?? '',
         domain: meta.domain,
         faviconUrl: meta.profileImage ?? meta.favicon,
         createdAt: now,
@@ -987,6 +1015,7 @@ class AppController extends StateNotifier<AppState> {
         note: note ?? '',
         sourceApp: source,
         lastOpenedAt: null,
+        mediaUrls: bodyMediaUrls,
       );
       await repo.upsert(savedItem);
       await repo.ensureTags(savedItem.tags);
@@ -1178,7 +1207,7 @@ class AppController extends StateNotifier<AppState> {
 
 class AppRepository {
   Database? _db;
-  static const _dbVersion = 2;
+  static const _dbVersion = 3;
 
   Future<void> init() async {
     _db ??= await openDatabase(
@@ -1198,14 +1227,14 @@ class AppRepository {
 
   Future<void> _createSchema(Database db) async {
     await db.execute(
-      'CREATE TABLE IF NOT EXISTS links(id TEXT PRIMARY KEY,url TEXT,normalized_url TEXT UNIQUE,title TEXT,description TEXT,image_url TEXT,domain TEXT,favicon_url TEXT,created_at TEXT,updated_at TEXT,is_read INTEGER,is_starred INTEGER,is_archived INTEGER,tags TEXT,folder_id TEXT,note TEXT,source_app TEXT,last_opened_at TEXT)',
+      'CREATE TABLE IF NOT EXISTS links(id TEXT PRIMARY KEY,url TEXT,normalized_url TEXT UNIQUE,title TEXT,description TEXT,image_url TEXT,domain TEXT,favicon_url TEXT,created_at TEXT,updated_at TEXT,is_read INTEGER,is_starred INTEGER,is_archived INTEGER,tags TEXT,folder_id TEXT,note TEXT,source_app TEXT,last_opened_at TEXT,media_urls TEXT)',
     );
     await db.execute('CREATE TABLE IF NOT EXISTS tags(id TEXT PRIMARY KEY,name TEXT UNIQUE)');
     await db.execute('CREATE TABLE IF NOT EXISTS folders(id TEXT PRIMARY KEY,name TEXT UNIQUE,sort_order INTEGER)');
   }
 
   Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
+    if (oldVersion < 3) {
       await _repairSchema(db);
     }
   }
@@ -1225,6 +1254,7 @@ class AppRepository {
       'note': "TEXT DEFAULT ''",
       'source_app': 'TEXT',
       'last_opened_at': 'TEXT',
+      'media_urls': "TEXT DEFAULT '[]'",
       'folder_id': 'TEXT',
       'created_at': 'TEXT',
       'updated_at': 'TEXT',
@@ -1538,6 +1568,7 @@ class CloudSyncService {
         note: (row['note'] as String?) ?? '',
         sourceApp: row['source_app'] as String?,
         lastOpenedAt: DateTime.tryParse((row['last_opened_at'] as String?) ?? ''),
+        mediaUrls: const [],
       ));
     }
     return out;
@@ -1661,6 +1692,7 @@ class Metadata {
     try {
       String? xProfileImage;
       var xMediaUrls = <String>[];
+      var threadMediaUrls = <String>[];
 
       // 1. 기본 요청 (리다이렉트 확인용)
       final normalizedUri = _normalizeNaverCafeUri(uri);
@@ -1759,6 +1791,13 @@ class Metadata {
         '.ArticleContentBox img',
       ]);
 
+      if (_isThreadsDomain(finalDomain)) {
+        threadMediaUrls = _extractThreadMediaUrlsFromDocument(document, finalUrl, image);
+        if (image == null || image.trim().isEmpty) {
+          image = threadMediaUrls.firstOrNull;
+        }
+      }
+
       if (_isXDomain(finalDomain)) {
         final xAssets = _extractXAssetsFromDocument(document, finalUrl);
         xProfileImage = _pickBetterXProfile(
@@ -1818,6 +1857,10 @@ class Metadata {
         xMediaUrls = _mergeUniqueUrls(xMediaUrls, [if (image != null) image]);
       }
 
+      final mediaUrls = _isXDomain(finalDomain)
+          ? xMediaUrls
+          : (_isThreadsDomain(finalDomain) ? threadMediaUrls : const <String>[]);
+
       return Meta(
         domain: finalDomain,
         favicon: favicon,
@@ -1825,7 +1868,7 @@ class Metadata {
         description: description,
         image: image,
         profileImage: xProfileImage,
-        mediaUrls: xMediaUrls,
+        mediaUrls: mediaUrls,
       );
     } catch (e) {
       debugPrint('Metadata fetch error: $e');
@@ -1939,6 +1982,52 @@ class Metadata {
   }
 
   static bool _isNotBlank(String? value) => value != null && value.trim().isNotEmpty;
+
+  static List<String> _extractThreadMediaUrlsFromDocument(dynamic doc, Uri baseUrl, String? previewImage) {
+    final candidates = _firstImageCandidatesFromSelectors(doc, const [
+      'article img',
+      'main img',
+      '[role="main"] img',
+      '[data-pressable-container] img',
+      '[data-pressable-container] picture img',
+      '.x1lliihq img',
+    ]).map((raw) => baseUrl.resolve(raw).toString()).toList();
+
+    final preview = previewImage?.trim();
+    final filtered = <String>[];
+    for (final url in candidates) {
+      final lower = url.toLowerCase();
+      if (!lower.startsWith('http://') && !lower.startsWith('https://')) continue;
+      if (lower.contains('profile_pic') || lower.contains('avatar') || lower.contains('emoji')) continue;
+      if (preview != null && preview.isNotEmpty && url == preview) continue;
+      filtered.add(url);
+    }
+    return _mergeUniqueUrls([], filtered);
+  }
+
+  static List<String> _firstImageCandidatesFromSelectors(dynamic doc, List<String> selectors) {
+    final out = <String>[];
+    final seen = <String>{};
+    for (final selector in selectors) {
+      final elements = doc.querySelectorAll(selector);
+      for (final element in elements) {
+        final src = _firstNonBlank([
+          element.attributes['data-src'],
+          element.attributes['data-lazy-src'],
+          element.attributes['data-original'],
+          element.attributes['src'],
+        ]);
+        if (src == null || src.startsWith('data:')) continue;
+        if (seen.add(src)) out.add(src);
+      }
+    }
+    return out;
+  }
+
+  static bool _isThreadsDomain(String host) {
+    final h = host.toLowerCase();
+    return h == 'threads.net' || h.endsWith('.threads.net');
+  }
 
   static bool _isXDomain(String host) {
     final h = host.toLowerCase();
@@ -3112,6 +3201,57 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     });
   }
 
+  List<Widget> _buildDetailMediaWidgets(BuildContext context, List<String> mediaUrls) {
+    if (mediaUrls.isEmpty) return const [];
+    return [
+      ...mediaUrls.take(4).map((mediaUrl) {
+        if (_isLikelyVideoMediaUrl(mediaUrl)) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Container(
+              height: 180,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              ),
+              child: Center(
+                child: FilledButton.icon(
+                  onPressed: () async {
+                    final u = Uri.tryParse(mediaUrl);
+                    if (u != null) await launchUrl(u, mode: LaunchMode.externalApplication);
+                  },
+                  icon: const Icon(Icons.play_circle_fill_rounded),
+                  label: const Text('동영상 열기'),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(20),
+              child: Image.network(
+                mediaUrl,
+                height: 200,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => Container(height: 200, color: Colors.grey[200], child: const Icon(Icons.broken_image, color: Colors.grey)),
+              ),
+            ),
+          ),
+        );
+      }),
+      const SizedBox(height: 8),
+    ];
+  }
+
   @override
   void dispose() {
     noteController.dispose();
@@ -3125,11 +3265,11 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     final link = state.links.where((e) => e.id == widget.id).firstOrNull;
     if (link == null) return const Scaffold(body: Center(child: Text('링크 없음')));
     final isXLink = _isXDomainForUi(link.domain);
+    final isThreadsLink = _isThreadsDomainForUi(link.domain);
     final profileImageUrl = _firstHttpUrl([xProfileImageUrl, link.faviconUrl]);
-    final mediaUrls = _mergeMediaForUi(
-      isXLink ? xMediaUrls : const [],
-      fallback: link.imageUrl,
-    );
+    final mediaUrls = isXLink
+        ? _mergeMediaForUi(xMediaUrls)
+        : (isThreadsLink ? _mergeMediaForUi(link.mediaUrls) : _mergeMediaForUi(const [], fallback: link.imageUrl));
 
     return Scaffold(
       appBar: AppBar(
@@ -3165,53 +3305,7 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
             ),
             const SizedBox(height: 14),
           ],
-          if (mediaUrls.isNotEmpty) ...[
-            ...mediaUrls.take(4).map((mediaUrl) {
-              if (_isLikelyVideoMediaUrl(mediaUrl)) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Container(
-                    height: 180,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                    ),
-                    child: Center(
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          final u = Uri.tryParse(mediaUrl);
-                          if (u != null) await launchUrl(u, mode: LaunchMode.externalApplication);
-                        },
-                        icon: const Icon(Icons.play_circle_fill_rounded),
-                        label: const Text('동영상 열기'),
-                      ),
-                    ),
-                  ),
-                );
-              }
-
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(20),
-                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(20),
-                    child: Image.network(
-                      mediaUrl,
-                      height: 200,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Container(height: 200, color: Colors.grey[200], child: const Icon(Icons.broken_image, color: Colors.grey)),
-                    ),
-                  ),
-                ),
-              );
-            }),
-            const SizedBox(height: 8),
-          ],
+          if (mediaUrls.isNotEmpty && !isThreadsLink) ..._buildDetailMediaWidgets(context, mediaUrls),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -3253,6 +3347,12 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
                 height: _isInstagramDomain(link.domain) ? 1.45 : 1.5,
               ),
             ),
+          ],
+          if (isThreadsLink && mediaUrls.isNotEmpty) ...[
+            const SizedBox(height: 16),
+            const Text('본문 미디어', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 10),
+            ..._buildDetailMediaWidgets(context, mediaUrls),
           ],
           const SizedBox(height: 24),
           FilledButton.icon(
@@ -3867,6 +3967,11 @@ String _servicePrefix(String domain) {
 bool _isInstagramDomain(String domain) {
   final d = domain.toLowerCase();
   return d.contains('instagram.com') || d.contains('instagr.am');
+}
+
+bool _isThreadsDomainForUi(String domain) {
+  final d = domain.toLowerCase();
+  return d.contains('threads.net');
 }
 
 bool _isXDomainForUi(String domain) {
