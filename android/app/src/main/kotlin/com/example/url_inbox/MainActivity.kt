@@ -1,4 +1,4 @@
-package com.example.url_inbox
+package com.peoplenetworks.urlinbox
 
 import android.content.Intent
 import android.net.Uri
