@@ -34,6 +34,13 @@ String get _authRedirectUri {
   if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
     return candidate.endsWith('/') ? candidate : '$candidate/';
   }
+
+  final current = Uri.base;
+  if ((current.scheme == 'http' || current.scheme == 'https') && current.host.isNotEmpty) {
+    final origin = '${current.scheme}://${current.authority}';
+    return origin.endsWith('/') ? origin : '$origin/';
+  }
+
   return _defaultWebAuthRedirectUri;
 }
 
