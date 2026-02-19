@@ -881,11 +881,13 @@ class AppController extends StateNotifier<AppState> {
     final description = item.description.trim();
     final image = item.imageUrl.trim();
     final favicon = item.faviconUrl.trim();
+    final isThreads = _isThreadsDomainForUi(item.domain);
 
     final missingTitle = title.isEmpty || title == item.url;
     final missingDescription = description.isEmpty;
     final missingVisual = image.isEmpty && favicon.isEmpty && item.mediaUrls.isEmpty;
-    return missingTitle || missingDescription || missingVisual;
+    final missingThreadsProfile = isThreads && _threadsProfileFromStored(item) == null;
+    return missingTitle || missingDescription || missingVisual || missingThreadsProfile;
   }
 
   Future<LinkItem?> _backfillLinkMetadata(LinkItem item) async {
@@ -897,10 +899,13 @@ class AppController extends StateNotifier<AppState> {
       final image = item.imageUrl.trim();
       final favicon = item.faviconUrl.trim();
 
+      final isThreads = _isThreadsDomainForUi(item.domain);
+      final needsThreadsProfile = isThreads && _threadsProfileFromStored(item) == null;
       final nextTitle = (title.isEmpty || title == item.url) ? (meta.title ?? item.title) : item.title;
       final nextDescription = description.isEmpty ? (meta.description ?? item.description) : item.description;
       final nextImage = image.isEmpty ? (meta.image ?? meta.mediaUrls.firstOrNull ?? item.imageUrl) : item.imageUrl;
-      final nextFavicon = favicon.isEmpty ? (meta.profileImage ?? meta.favicon) : item.faviconUrl;
+      final fallbackFavicon = isThreads ? meta.profileImage : (meta.profileImage ?? meta.favicon);
+      final nextFavicon = (favicon.isEmpty || needsThreadsProfile) ? (fallbackFavicon ?? item.faviconUrl) : item.faviconUrl;
       final nextMediaUrls = item.mediaUrls.isEmpty ? meta.mediaUrls : item.mediaUrls;
 
       final changed =
@@ -2196,13 +2201,13 @@ class Metadata {
   static String? _extractThreadsProfileImageFromDocument(dynamic doc, Uri baseUrl) {
     final candidates = <String>[];
 
-    void addCandidate(String? raw) {
+    void addCandidate(String? raw, {bool force = false}) {
       final normalized = _normalizeText(raw);
       if (normalized == null || normalized.startsWith('data:')) return;
       final resolved = baseUrl.resolve(normalized).toString();
       final lower = resolved.toLowerCase();
       if (!lower.startsWith('http://') && !lower.startsWith('https://')) return;
-      if (!_looksLikeThreadsProfileImage(lower)) return;
+      if (!force && !_looksLikeThreadsProfileImage(lower)) return;
       candidates.add(resolved);
     }
 
@@ -2210,6 +2215,10 @@ class Metadata {
       for (final element in doc.querySelectorAll(selector)) {
         addCandidate(element.attributes['content']);
       }
+    }
+
+    for (final candidate in _threadProfileImageHintsFromScripts(doc, baseUrl)) {
+      addCandidate(candidate, force: true);
     }
 
     addMeta('meta[property="twitter:image"]');
@@ -2334,6 +2343,37 @@ class Metadata {
             .replaceAll('&amp;', '&');
         final resolved = baseUrl.resolve(normalized).toString();
         if (seen.add(resolved)) out.add(resolved);
+      }
+    }
+    return out;
+  }
+
+  static List<String> _threadProfileImageHintsFromScripts(dynamic doc, Uri baseUrl) {
+    final out = <String>[];
+    final seen = <String>{};
+    final patterns = [
+      RegExp(r'profile_pic_url(?:_hd)?"?\s*[:=]\s*"([^"]+)"', caseSensitive: false),
+      RegExp(r'avatar(?:_url)?"?\s*[:=]\s*"([^"]+)"', caseSensitive: false),
+    ];
+
+    for (final script in doc.querySelectorAll('script')) {
+      final text = script.text;
+      if (text.trim().isEmpty) continue;
+
+      final normalizedScript = text
+          .replaceAll(r'\/', '/')
+          .replaceAll(r'/', '/')
+          .replaceAll(r'&', '&')
+          .replaceAll(r'\"', '"')
+          .replaceAll('&amp;', '&');
+
+      for (final pattern in patterns) {
+        for (final match in pattern.allMatches(normalizedScript)) {
+          final raw = match.group(1);
+          if (raw == null || raw.isEmpty) continue;
+          final resolved = baseUrl.resolve(raw).toString();
+          if (seen.add(resolved)) out.add(resolved);
+        }
       }
     }
     return out;
@@ -4397,29 +4437,21 @@ String? _firstHttpUrl(Iterable<String?> urls) {
 }
 
 String? _threadsProfileFromStored(LinkItem item) {
-  for (final raw in [item.faviconUrl, item.imageUrl, ...item.mediaUrls]) {
-    final value = raw.trim();
-    if (value.isEmpty) continue;
-    if (!value.startsWith('http://') && !value.startsWith('https://')) continue;
-    final lower = value.toLowerCase();
-    if (_isThreadsBrandLogoUrl(lower)) continue;
-    if (!_isThreadsProfileLikeUrl(lower)) continue;
-    return value;
+  final favicon = _firstHttpUrl([item.faviconUrl]);
+  if (favicon != null && _isThreadsUsableProfileThumbnail(item, favicon)) {
+    return favicon;
   }
   return null;
 }
 
-bool _isThreadsProfileLikeUrl(String lowerUrl) {
-  if (lowerUrl.contains('profile_pic')) return true;
-  if (lowerUrl.contains('profilepic')) return true;
-  if (lowerUrl.contains('profile_images')) return true;
-  if (lowerUrl.contains('profilepicture')) return true;
-  if (lowerUrl.contains('/profile')) return true;
-  if (lowerUrl.contains('/avatar/')) return true;
-  if (lowerUrl.contains('s150x150')) return true;
-  if (lowerUrl.contains('s320x320')) return true;
-  if (lowerUrl.contains('avatar')) return true;
-  return false;
+bool _isThreadsUsableProfileThumbnail(LinkItem item, String url) {
+  final lower = url.toLowerCase();
+  if (_isThreadsBrandLogoUrl(lower)) return false;
+  if (_urlsPointToSameResource(url, item.imageUrl)) return false;
+  for (final media in item.mediaUrls) {
+    if (_urlsPointToSameResource(url, media)) return false;
+  }
+  return true;
 }
 
 bool _isThreadsBrandLogoUrl(String lowerUrl) {
