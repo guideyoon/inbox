@@ -1,6 +1,6 @@
 # Privacy Policy (Draft)
 
-Last updated: 2026-02-14
+Last updated: 2026-02-19
 
 This Privacy Policy explains how URL Inbox handles data.
 
@@ -12,7 +12,8 @@ URL Inbox stores the following data locally on your device:
 
 ## 2. Where data is stored
 - All saved content is stored locally on device storage (SQLite and local preferences).
-- The app does not require account sign-in.
+- The app can be used without account sign-in for local-only usage.
+- Optional sign-in enables cloud sync across devices when configured.
 
 ## 3. Network access
 To enrich link previews, the app may fetch webpage metadata from shared or saved URLs.
@@ -20,7 +21,8 @@ This may include requests to third-party websites such as social platforms and n
 
 ## 4. Data sharing
 - The app does not sell personal data.
-- The app does not upload your saved link database to a remote server by default.
+- By default, local-only usage does not upload your saved link database to a remote server.
+- If cloud sync is enabled and you sign in, saved links and related metadata are synchronized to your configured Supabase backend.
 
 ## 5. Notifications
 If reminders are enabled, local notifications are scheduled on your device based on unread link count.

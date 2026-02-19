@@ -31,6 +31,7 @@
 - [ ] App description and keyword set prepared
 - [ ] Support contact email prepared
 - [ ] Privacy policy URL prepared and reachable
+- [ ] Privacy policy reflects current auth/cloud behavior
 
 ## 7) Manual Regression Pass
 - [ ] Save URL manually
@@ -39,4 +40,4 @@
 - [ ] Folder create/select/delete
 - [ ] Tag add/remove
 - [ ] Open original URL
-- [ ] Theme switch (system/light/dark)
+- [ ] Theme switch (light/dark)

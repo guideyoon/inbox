@@ -287,7 +287,7 @@ class UrlInboxApp extends ConsumerWidget {
     );
 
     return MaterialApp.router(
-      title: 'URL Inbox',
+      title: '인박스',
       debugShowCheckedModeBanner: false,
       theme: lightTheme,
       darkTheme: darkTheme,
@@ -979,6 +979,7 @@ class AppController extends StateNotifier<AppState> {
     final bodyMediaUrls = meta.mediaUrls;
     final now = DateTime.now();
     final autoTag = _domainTag(meta.domain);
+    final isThreads = _isThreadsDomainForUi(meta.domain);
 
     LinkItem savedItem;
     
@@ -987,7 +988,9 @@ class AppController extends StateNotifier<AppState> {
         title: title ?? meta.title ?? existing.title,
         description: meta.description ?? existing.description,
         imageUrl: previewImage ?? existing.imageUrl,
-        faviconUrl: meta.profileImage ?? (existing.faviconUrl.isEmpty ? meta.favicon : existing.faviconUrl),
+        faviconUrl: isThreads
+            ? (meta.profileImage ?? existing.faviconUrl)
+            : (meta.profileImage ?? (existing.faviconUrl.isEmpty ? meta.favicon : existing.faviconUrl)),
         mediaUrls: bodyMediaUrls.isEmpty ? existing.mediaUrls : bodyMediaUrls,
         note: (note == null || note.isEmpty) ? existing.note : note,
         tags: {...existing.tags, autoTag}.toList(),
@@ -1004,7 +1007,7 @@ class AppController extends StateNotifier<AppState> {
         description: meta.description ?? '',
         imageUrl: previewImage ?? '',
         domain: meta.domain,
-        faviconUrl: meta.profileImage ?? meta.favicon,
+        faviconUrl: isThreads ? (meta.profileImage ?? '') : (meta.profileImage ?? meta.favicon),
         createdAt: now,
         updatedAt: now,
         isRead: false,
@@ -1638,7 +1641,7 @@ class ReminderService {
     if (unread <= 0) return _plugin.cancel(9001);
     await _plugin.periodicallyShow(
       9001,
-      'URL Inbox 리마인더',
+      '인박스 리마인더',
       '읽지 않은 링크 $unread개가 있습니다.',
       RepeatInterval.daily,
       const NotificationDetails(android: AndroidNotificationDetails('daily', 'Daily')),
@@ -1721,6 +1724,7 @@ class Metadata {
     final client = http.Client();
     try {
       String? xProfileImage;
+      String? threadProfileImage;
       var xMediaUrls = <String>[];
       var threadMediaUrls = <String>[];
 
@@ -1822,7 +1826,16 @@ class Metadata {
       ]);
 
       if (_isThreadsDomain(finalDomain)) {
-        threadMediaUrls = _extractThreadMediaUrlsFromDocument(document, finalUrl, image);
+        threadProfileImage = _extractThreadsProfileImageFromDocument(document, finalUrl);
+        threadMediaUrls = _extractThreadMediaUrlsFromDocument(
+          document,
+          finalUrl,
+          image,
+          profileImage: threadProfileImage,
+        );
+        if (_urlsPointToSameResource(image, threadProfileImage)) {
+          image = null;
+        }
         if (image == null || image.trim().isEmpty) {
           image = threadMediaUrls.firstOrNull;
         }
@@ -1897,7 +1910,7 @@ class Metadata {
         title: title,
         description: description,
         image: image,
-        profileImage: xProfileImage,
+        profileImage: _isThreadsDomain(finalDomain) ? threadProfileImage : xProfileImage,
         mediaUrls: mediaUrls,
       );
     } catch (e) {
@@ -2013,7 +2026,50 @@ class Metadata {
 
   static bool _isNotBlank(String? value) => value != null && value.trim().isNotEmpty;
 
-  static List<String> _extractThreadMediaUrlsFromDocument(dynamic doc, Uri baseUrl, String? previewImage) {
+  static String? _extractThreadsProfileImageFromDocument(dynamic doc, Uri baseUrl) {
+    final candidates = <String>[];
+
+    void addCandidate(String? raw) {
+      final normalized = _normalizeText(raw);
+      if (normalized == null || normalized.startsWith('data:')) return;
+      final resolved = baseUrl.resolve(normalized).toString();
+      final lower = resolved.toLowerCase();
+      if (!lower.startsWith('http://') && !lower.startsWith('https://')) return;
+      candidates.add(resolved);
+    }
+
+    void addMeta(String selector) {
+      for (final element in doc.querySelectorAll(selector)) {
+        addCandidate(element.attributes['content']);
+      }
+    }
+
+    addMeta('meta[property="twitter:image"]');
+    addMeta('meta[name="twitter:image"]');
+    addMeta('meta[property="twitter:image:src"]');
+    addMeta('meta[name="twitter:image:src"]');
+    addMeta('meta[property="og:image:user_generated"]');
+
+    for (final candidate in _threadProfileImageCandidatesFromScripts(doc, baseUrl)) {
+      addCandidate(candidate);
+    }
+
+    final selectors = _firstImageCandidatesFromSelectors(doc, const ['img']);
+    for (final raw in selectors) {
+      if (_looksLikeThreadsProfileImage(raw.toLowerCase())) {
+        addCandidate(raw);
+      }
+    }
+
+    final unique = _mergeUniqueUrls([], candidates);
+    for (final url in unique) {
+      if (_isThreadsBrandLogoUrl(url.toLowerCase())) continue;
+      return url;
+    }
+    return null;
+  }
+
+  static List<String> _extractThreadMediaUrlsFromDocument(dynamic doc, Uri baseUrl, String? previewImage, {String? profileImage}) {
     final selectorCandidates = _firstImageCandidatesFromSelectors(doc, const [
       'article img',
       'main img',
@@ -2030,12 +2086,16 @@ class Metadata {
       final lower = url.toLowerCase();
       if (!lower.startsWith('http://') && !lower.startsWith('https://')) continue;
       if (_isLikelyNonContentImage(lower)) continue;
+      if (_urlsPointToSameResource(url, profileImage)) continue;
       filtered.add(url);
     }
 
     final merged = _mergeUniqueUrls([], filtered);
     final preview = previewImage == null ? null : baseUrl.resolve(previewImage).toString();
-    if (preview != null && preview.isNotEmpty && !_isLikelyNonContentImage(preview.toLowerCase())) {
+    if (preview != null &&
+        preview.isNotEmpty &&
+        !_isLikelyNonContentImage(preview.toLowerCase()) &&
+        !_urlsPointToSameResource(preview, profileImage)) {
       return _mergeUniqueUrls([preview], merged);
     }
     return merged;
@@ -2109,6 +2169,47 @@ class Metadata {
       }
     }
     return out;
+  }
+
+  static List<String> _threadProfileImageCandidatesFromScripts(dynamic doc, Uri baseUrl) {
+    final out = <String>[];
+    final seen = <String>{};
+    final profileRegex = RegExp(
+      r'''https?://[^\s"'<>]+?(?:profile[^\s"'<>]*|avatar[^\s"'<>]*)[^\s"'<>]*(?:\.(?:jpg|jpeg|png|webp))?(?:\?[^\s"'<>]*)?''',
+      caseSensitive: false,
+    );
+
+    for (final script in doc.querySelectorAll('script')) {
+      final text = script.text;
+      if (text.trim().isEmpty) continue;
+
+      final normalizedScript = text
+          .replaceAll(r'\/', '/')
+          .replaceAll(r'\u002F', '/')
+          .replaceAll(r'\u0026', '&')
+          .replaceAll('&amp;', '&');
+
+      for (final match in profileRegex.allMatches(normalizedScript)) {
+        final raw = match.group(0);
+        if (raw == null || raw.isEmpty) continue;
+        final resolved = baseUrl.resolve(raw).toString();
+        if (seen.add(resolved)) out.add(resolved);
+      }
+    }
+    return out;
+  }
+
+  static bool _looksLikeThreadsProfileImage(String lowerUrl) {
+    if (lowerUrl.contains('profile_pic')) return true;
+    if (lowerUrl.contains('profilepic')) return true;
+    if (lowerUrl.contains('profile_images')) return true;
+    if (lowerUrl.contains('profilepicture')) return true;
+    if (lowerUrl.contains('/profile')) return true;
+    if (lowerUrl.contains('/avatar/')) return true;
+    if (lowerUrl.contains('s150x150')) return true;
+    if (lowerUrl.contains('s320x320')) return true;
+    if (lowerUrl.contains('avatar')) return true;
+    return false;
   }
 
   static bool _isLikelyNonContentImage(String lowerUrl) {
@@ -2412,7 +2513,7 @@ class AuthEntryPage extends ConsumerWidget {
                 children: [
                   const Icon(Icons.inbox_rounded, size: 52),
                   const SizedBox(height: 16),
-                  const Text('URL Inbox', textAlign: TextAlign.center, style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
+                  const Text('인박스', textAlign: TextAlign.center, style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
                   const SizedBox(height: 8),
                   const Text('웹과 앱에서 같은 링크를 보려면 로그인하세요.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF8B95A1))),
                   const SizedBox(height: 24),
@@ -3365,11 +3466,12 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     if (link == null) return const Scaffold(body: Center(child: Text('링크 없음')));
     final isXLink = _isXDomainForUi(link.domain);
     final isThreadsLink = _isThreadsDomainForUi(link.domain);
-    final profileImageRaw = _firstHttpUrl([xProfileImageUrl, link.faviconUrl]);
+    final threadsProfileImage = isThreadsLink ? _threadsProfileFromStored(link) : null;
+    final profileImageRaw = _firstHttpUrl([xProfileImageUrl, threadsProfileImage, if (!isThreadsLink) link.faviconUrl]);
     final profileImageUrl = profileImageRaw == null ? null : _webImageUrlForUi(profileImageRaw);
     final mediaUrls = isXLink
         ? _mergeMediaForUi(xMediaUrls)
-        : (isThreadsLink ? _mergeMediaForUi(link.mediaUrls, fallback: link.imageUrl) : _mergeMediaForUi(const [], fallback: link.imageUrl));
+        : (isThreadsLink ? _mergeMediaForUi(link.mediaUrls, fallback: link.imageUrl, exclude: [threadsProfileImage]) : _mergeMediaForUi(const [], fallback: link.imageUrl));
 
     return Scaffold(
       appBar: AppBar(
@@ -4107,10 +4209,11 @@ bool _isXDomainForUi(String domain) {
 }
 
 String? _inboxThumbUrl(LinkItem item) {
+  final threadsProfile = _isThreadsDomainForUi(item.domain) ? _threadsProfileFromStored(item) : null;
   final source = _isXDomainForUi(item.domain)
       ? _firstHttpUrl([item.faviconUrl, item.imageUrl])
       : (_isThreadsDomainForUi(item.domain)
-          ? _firstHttpUrl([item.imageUrl, item.mediaUrls.firstOrNull, item.faviconUrl])
+          ? _firstHttpUrl([threadsProfile])
           : _firstHttpUrl([item.imageUrl, item.faviconUrl]));
   if (source == null) return null;
   return _webImageUrlForUi(source);
@@ -4125,12 +4228,46 @@ String? _firstHttpUrl(Iterable<String?> urls) {
   return null;
 }
 
-List<String> _mergeMediaForUi(Iterable<String> mediaUrls, {String? fallback}) {
+String? _threadsProfileFromStored(LinkItem item) {
+  final favicon = _firstHttpUrl([item.faviconUrl]);
+  if (favicon != null && !_isThreadsBrandLogoUrl(favicon.toLowerCase())) {
+    return favicon;
+  }
+  return null;
+}
+
+bool _isThreadsBrandLogoUrl(String lowerUrl) {
+  if (lowerUrl.endsWith('/favicon.ico')) return true;
+  if (lowerUrl.contains('threads.net/assets') && lowerUrl.contains('icon')) return true;
+  if (lowerUrl.contains('threads.com/assets') && lowerUrl.contains('icon')) return true;
+  if (lowerUrl.contains('icon-ios')) return true;
+  if (lowerUrl.contains('apple-touch-icon')) return true;
+  if (lowerUrl.contains('/favicon')) return true;
+  return false;
+}
+
+bool _urlsPointToSameResource(String? first, String? second) {
+  final a = first?.trim();
+  final b = second?.trim();
+  if (a == null || a.isEmpty || b == null || b.isEmpty) return false;
+
+  String keyOf(String raw) {
+    final uri = Uri.tryParse(raw);
+    if (uri == null) return raw.toLowerCase();
+    final path = uri.path.isEmpty ? '/' : uri.path;
+    return '${uri.host.toLowerCase()}$path';
+  }
+
+  return keyOf(a) == keyOf(b);
+}
+
+List<String> _mergeMediaForUi(Iterable<String> mediaUrls, {String? fallback, Iterable<String?> exclude = const []}) {
   final out = <String>[];
   final seen = <String>{};
   for (final raw in [...mediaUrls, if (fallback != null && fallback.trim().isNotEmpty) fallback.trim()]) {
     if (raw.isEmpty) continue;
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) continue;
+    if (exclude.any((candidate) => _urlsPointToSameResource(raw, candidate))) continue;
     final resolved = _webImageUrlForUi(raw);
     if (seen.add(resolved)) out.add(resolved);
   }
