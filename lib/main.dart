@@ -570,6 +570,7 @@ class AppController extends StateNotifier<AppState> {
   final ReminderService reminder;
   final CloudSyncService? cloud;
   StreamSubscription<AuthState>? _authSub;
+  Timer? _autoSyncTimer;
 
   String? get _userId => _cloudConfigured ? Supabase.instance.client.auth.currentUser?.id : null;
 
@@ -592,6 +593,7 @@ class AppController extends StateNotifier<AppState> {
   @override
   void dispose() {
     _authSub?.cancel();
+    _stopAutoSync();
     super.dispose();
   }
 
@@ -612,6 +614,7 @@ class AppController extends StateNotifier<AppState> {
           candidate: null,
           dismissedUrls: cleared ? <String>{} : state.dismissedUrls,
         );
+        _startAutoSync(user.id);
         await _syncOnLogin(user.id);
       } else {
         final cleared = await _ensureLocalScopeForAuthUser(null);
@@ -625,6 +628,7 @@ class AppController extends StateNotifier<AppState> {
           candidate: null,
           dismissedUrls: cleared ? <String>{} : state.dismissedUrls,
         );
+        _stopAutoSync();
         if (cleared) {
           await _syncReminder();
         }
@@ -639,6 +643,19 @@ class AppController extends StateNotifier<AppState> {
       if (!mounted || !state.signedIn) return;
       await syncNow(silent: true, forceUserId: userId);
     });
+  }
+
+  void _startAutoSync(String userId) {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (!mounted || !state.signedIn) return;
+      unawaited(syncNow(silent: true, forceUserId: userId));
+    });
+  }
+
+  void _stopAutoSync() {
+    _autoSyncTimer?.cancel();
+    _autoSyncTimer = null;
   }
 
   Future<void> signInWithGoogle() async {
@@ -658,7 +675,19 @@ class AppController extends StateNotifier<AppState> {
     final session = response.session;
     final user = response.user ?? session?.user;
     if (session != null && user != null) {
-      state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
+      final cleared = await _ensureLocalScopeForAuthUser(user.id);
+      state = state.copyWith(
+        signedIn: true,
+        userEmail: user.email,
+        authGatePassed: true,
+        links: cleared ? const [] : state.links,
+        tags: cleared ? const [] : state.tags,
+        folders: cleared ? const [] : state.folders,
+        candidate: null,
+        dismissedUrls: cleared ? <String>{} : state.dismissedUrls,
+      );
+      _startAutoSync(user.id);
+      await _syncOnLogin(user.id);
       return true;
     }
     return false;
@@ -672,13 +701,26 @@ class AppController extends StateNotifier<AppState> {
     );
     final user = response.user;
     if (user != null) {
-      state = state.copyWith(signedIn: true, userEmail: user.email, authGatePassed: true);
+      final cleared = await _ensureLocalScopeForAuthUser(user.id);
+      state = state.copyWith(
+        signedIn: true,
+        userEmail: user.email,
+        authGatePassed: true,
+        links: cleared ? const [] : state.links,
+        tags: cleared ? const [] : state.tags,
+        folders: cleared ? const [] : state.folders,
+        candidate: null,
+        dismissedUrls: cleared ? <String>{} : state.dismissedUrls,
+      );
+      _startAutoSync(user.id);
+      await _syncOnLogin(user.id);
     }
   }
 
   Future<void> signOutCloud() async {
     if (!_cloudConfigured) return;
     await Supabase.instance.client.auth.signOut();
+    _stopAutoSync();
     final cleared = await _ensureLocalScopeForAuthUser(null);
     state = state.copyWith(
       signedIn: false,
@@ -848,6 +890,7 @@ class AppController extends StateNotifier<AppState> {
       _bindAuthState();
       await refresh();
       if (user != null) {
+        _startAutoSync(user.id);
         await _syncOnLogin(user.id);
       }
       // 공유 링크는 비동기로 처리 (UI 블로킹 방지)
@@ -1470,6 +1513,7 @@ class CloudSyncService {
     if (syncable.isEmpty) return;
     for (final e in syncable) {
       final row = {
+        'id': e.id,
         'user_id': userId,
         'url': e.url,
         'normalized_url': e.normalizedUrl,
@@ -1497,46 +1541,69 @@ class CloudSyncService {
   }
 
   Future<void> _upsertLinkRow(Map<String, dynamic> row) async {
-    try {
-      await client.from('links').upsert(row, onConflict: 'user_id,normalized_url');
-      return;
-    } catch (_) {
-      // 제약/스키마 불일치 시 update+insert로 폴백
-    }
+    final attempts = <Map<String, dynamic>>[
+      Map<String, dynamic>.from(row),
+      _minimalLinkRow(row),
+    ];
 
-    final baseRow = Map<String, dynamic>.from(row)..remove('created_at');
+    Object? lastError;
 
-    Future<bool> updateExisting(Map<String, dynamic> payload) async {
-      final updated = await client
-          .from('links')
-          .update(payload)
-          .eq('user_id', row['user_id'])
-          .eq('normalized_url', row['normalized_url'])
-          .select('id')
-          .limit(1);
-      return (updated as List).isNotEmpty;
-    }
-
-    try {
-      final exists = await updateExisting(baseRow);
-      if (!exists) {
-        await client.from('links').insert(row);
+    for (final candidate in attempts) {
+      try {
+        await client.from('links').upsert(candidate, onConflict: 'user_id,normalized_url');
+        return;
+      } catch (e) {
+        lastError = e;
       }
-      return;
-    } catch (_) {
-      // folder_id FK 문제 가능성 폴백
+
+      final baseRow = Map<String, dynamic>.from(candidate)
+        ..remove('created_at')
+        ..remove('id');
+
+      Future<bool> updateExisting(Map<String, dynamic> payload) async {
+        final updated = await client
+            .from('links')
+            .update(payload)
+            .eq('user_id', candidate['user_id'])
+            .eq('normalized_url', candidate['normalized_url'])
+            .select('id')
+            .limit(1);
+        return (updated as List).isNotEmpty;
+      }
+
+      try {
+        final exists = await updateExisting(baseRow);
+        if (!exists) {
+          await client.from('links').insert(candidate);
+        }
+        return;
+      } catch (e) {
+        lastError = e;
+      }
+
+      final noFolderRow = Map<String, dynamic>.from(baseRow)..['folder_id'] = null;
+      try {
+        final exists = await updateExisting(noFolderRow);
+        if (!exists) {
+          final insertRow = Map<String, dynamic>.from(candidate)..['folder_id'] = null;
+          await client.from('links').insert(insertRow);
+        }
+        return;
+      } catch (e) {
+        lastError = e;
+      }
     }
 
-    final noFolderRow = Map<String, dynamic>.from(baseRow)..['folder_id'] = null;
-    try {
-      final exists = await updateExisting(noFolderRow);
-      if (!exists) {
-        final insertRow = Map<String, dynamic>.from(row)..['folder_id'] = null;
-        await client.from('links').insert(insertRow);
-      }
-    } catch (e) {
-      debugPrint('link upsert fallback failed: $e');
+    debugPrint('link upsert failed after fallback attempts: $lastError');
+  }
+
+  Map<String, dynamic> _minimalLinkRow(Map<String, dynamic> row) {
+    final out = <String, dynamic>{};
+    for (final key in const ['id', 'user_id', 'url', 'normalized_url', 'title', 'created_at', 'updated_at']) {
+      final value = row[key];
+      if (value != null) out[key] = value;
     }
+    return out;
   }
 
   Future<void> markDeleted(String userId, String normalizedUrl) async {
@@ -1547,7 +1614,13 @@ class CloudSyncService {
   }
 
   Future<List<LinkItem>> fetchLinks(String userId) async {
-    final data = await client.from('links').select().eq('user_id', userId).order('updated_at', ascending: false);
+    dynamic data;
+    try {
+      data = await client.from('links').select().eq('user_id', userId).order('updated_at', ascending: false);
+    } catch (_) {
+      data = await client.from('links').select().eq('user_id', userId);
+    }
+
     final rows = (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
 
     final out = <LinkItem>[];
@@ -1561,7 +1634,7 @@ class CloudSyncService {
       final updatedAt = DateTime.tryParse((row['updated_at'] as String?) ?? '') ?? createdAt;
 
       out.add(LinkItem(
-        id: _uuid.v4(),
+        id: (row['id'] as String?) ?? _uuid.v4(),
         url: url,
         normalizedUrl: normalized,
         title: (row['title'] as String?) ?? url,
