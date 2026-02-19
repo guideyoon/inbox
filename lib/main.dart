@@ -2202,6 +2202,7 @@ class Metadata {
       final resolved = baseUrl.resolve(normalized).toString();
       final lower = resolved.toLowerCase();
       if (!lower.startsWith('http://') && !lower.startsWith('https://')) return;
+      if (!_looksLikeThreadsProfileImage(lower)) return;
       candidates.add(resolved);
     }
 
@@ -4396,11 +4397,29 @@ String? _firstHttpUrl(Iterable<String?> urls) {
 }
 
 String? _threadsProfileFromStored(LinkItem item) {
-  final favicon = _firstHttpUrl([item.faviconUrl]);
-  if (favicon != null && !_isThreadsBrandLogoUrl(favicon.toLowerCase())) {
-    return favicon;
+  for (final raw in [item.faviconUrl, item.imageUrl, ...item.mediaUrls]) {
+    final value = raw.trim();
+    if (value.isEmpty) continue;
+    if (!value.startsWith('http://') && !value.startsWith('https://')) continue;
+    final lower = value.toLowerCase();
+    if (_isThreadsBrandLogoUrl(lower)) continue;
+    if (!_isThreadsProfileLikeUrl(lower)) continue;
+    return value;
   }
   return null;
+}
+
+bool _isThreadsProfileLikeUrl(String lowerUrl) {
+  if (lowerUrl.contains('profile_pic')) return true;
+  if (lowerUrl.contains('profilepic')) return true;
+  if (lowerUrl.contains('profile_images')) return true;
+  if (lowerUrl.contains('profilepicture')) return true;
+  if (lowerUrl.contains('/profile')) return true;
+  if (lowerUrl.contains('/avatar/')) return true;
+  if (lowerUrl.contains('s150x150')) return true;
+  if (lowerUrl.contains('s320x320')) return true;
+  if (lowerUrl.contains('avatar')) return true;
+  return false;
 }
 
 bool _isThreadsBrandLogoUrl(String lowerUrl) {
