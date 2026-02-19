@@ -830,31 +830,100 @@ class AppController extends StateNotifier<AppState> {
       if (merged.tags.isNotEmpty) {
         await repo.ensureTags(merged.tags);
       }
+      byNormalized[merged.normalizedUrl] = merged;
+
+      if (_needsMetadataBackfill(merged)) {
+        final backfilled = await _backfillLinkMetadata(merged);
+        if (backfilled != null) {
+          await repo.upsert(backfilled);
+          if (backfilled.tags.isNotEmpty) {
+            await repo.ensureTags(backfilled.tags);
+          }
+          byNormalized[backfilled.normalizedUrl] = backfilled;
+        }
+      }
     }
   }
 
   LinkItem _mergeRemoteToLocal(LinkItem remote, LinkItem? local) {
+    final remoteTitle = remote.title.trim();
+    final remoteDescription = remote.description.trim();
+    final remoteImage = remote.imageUrl.trim();
+    final remoteDomain = remote.domain.trim();
+    final remoteFavicon = remote.faviconUrl.trim();
+    final remoteNote = remote.note.trim();
+
     return LinkItem(
-      id: local?.id ?? _uuid.v4(),
+      id: local?.id ?? remote.id,
       url: remote.url,
       normalizedUrl: remote.normalizedUrl,
-      title: remote.title,
-      description: remote.description,
-      imageUrl: remote.imageUrl,
-      domain: remote.domain,
-      faviconUrl: remote.faviconUrl,
+      title: remoteTitle.isNotEmpty ? remote.title : (local?.title ?? remote.url),
+      description: remoteDescription.isNotEmpty ? remote.description : (local?.description ?? ''),
+      imageUrl: remoteImage.isNotEmpty ? remote.imageUrl : (local?.imageUrl ?? ''),
+      domain: remoteDomain.isNotEmpty ? remote.domain : (local?.domain ?? (Uri.tryParse(remote.url)?.host ?? '')),
+      faviconUrl: remoteFavicon.isNotEmpty ? remote.faviconUrl : (local?.faviconUrl ?? ''),
       createdAt: local?.createdAt ?? remote.createdAt,
       updatedAt: remote.updatedAt,
       isRead: remote.isRead,
       isStarred: remote.isStarred,
       isArchived: remote.isArchived,
-      tags: remote.tags,
+      tags: remote.tags.isNotEmpty ? remote.tags : (local?.tags ?? const []),
       folderId: remote.folderId ?? local?.folderId,
-      note: remote.note,
-      sourceApp: remote.sourceApp,
-      lastOpenedAt: remote.lastOpenedAt,
+      note: remoteNote.isNotEmpty ? remote.note : (local?.note ?? ''),
+      sourceApp: remote.sourceApp ?? local?.sourceApp,
+      lastOpenedAt: remote.lastOpenedAt ?? local?.lastOpenedAt,
       mediaUrls: remote.mediaUrls.isNotEmpty ? remote.mediaUrls : (local?.mediaUrls ?? const []),
     );
+  }
+
+  bool _needsMetadataBackfill(LinkItem item) {
+    final title = item.title.trim();
+    final description = item.description.trim();
+    final image = item.imageUrl.trim();
+    final favicon = item.faviconUrl.trim();
+
+    final missingTitle = title.isEmpty || title == item.url;
+    final missingDescription = description.isEmpty;
+    final missingVisual = image.isEmpty && favicon.isEmpty && item.mediaUrls.isEmpty;
+    return missingTitle || missingDescription || missingVisual;
+  }
+
+  Future<LinkItem?> _backfillLinkMetadata(LinkItem item) async {
+    try {
+      final meta = await Metadata.fetch(item.url);
+
+      final title = item.title.trim();
+      final description = item.description.trim();
+      final image = item.imageUrl.trim();
+      final favicon = item.faviconUrl.trim();
+
+      final nextTitle = (title.isEmpty || title == item.url) ? (meta.title ?? item.title) : item.title;
+      final nextDescription = description.isEmpty ? (meta.description ?? item.description) : item.description;
+      final nextImage = image.isEmpty ? (meta.image ?? meta.mediaUrls.firstOrNull ?? item.imageUrl) : item.imageUrl;
+      final nextFavicon = favicon.isEmpty ? (meta.profileImage ?? meta.favicon) : item.faviconUrl;
+      final nextMediaUrls = item.mediaUrls.isEmpty ? meta.mediaUrls : item.mediaUrls;
+
+      final changed =
+          nextTitle != item.title ||
+          nextDescription != item.description ||
+          nextImage != item.imageUrl ||
+          nextFavicon != item.faviconUrl ||
+          nextMediaUrls.length != item.mediaUrls.length ||
+          !nextMediaUrls.every(item.mediaUrls.contains);
+
+      if (!changed) return null;
+
+      return item.copyWith(
+        title: nextTitle,
+        description: nextDescription,
+        imageUrl: nextImage,
+        faviconUrl: nextFavicon,
+        mediaUrls: nextMediaUrls,
+        updatedAt: DateTime.now(),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   void _triggerBackgroundSync() {
@@ -1541,19 +1610,18 @@ class CloudSyncService {
   }
 
   Future<void> _upsertLinkRow(Map<String, dynamic> row) async {
-    final attempts = <Map<String, dynamic>>[
-      Map<String, dynamic>.from(row),
-      _minimalLinkRow(row),
-    ];
-
+    final candidate = Map<String, dynamic>.from(row);
     Object? lastError;
 
-    for (final candidate in attempts) {
+    for (var attempt = 0; attempt < 10; attempt++) {
       try {
         await client.from('links').upsert(candidate, onConflict: 'user_id,normalized_url');
         return;
       } catch (e) {
         lastError = e;
+        if (_removeUnknownLinkColumn(candidate, e)) {
+          continue;
+        }
       }
 
       final baseRow = Map<String, dynamic>.from(candidate)
@@ -1579,6 +1647,9 @@ class CloudSyncService {
         return;
       } catch (e) {
         lastError = e;
+        if (_removeUnknownLinkColumn(candidate, e)) {
+          continue;
+        }
       }
 
       final noFolderRow = Map<String, dynamic>.from(baseRow)..['folder_id'] = null;
@@ -1591,19 +1662,35 @@ class CloudSyncService {
         return;
       } catch (e) {
         lastError = e;
+        if (_removeUnknownLinkColumn(candidate, e)) {
+          continue;
+        }
       }
+
+      break;
     }
 
-    debugPrint('link upsert failed after fallback attempts: $lastError');
+    debugPrint('link upsert failed after adaptive fallback: $lastError');
   }
 
-  Map<String, dynamic> _minimalLinkRow(Map<String, dynamic> row) {
-    final out = <String, dynamic>{};
-    for (final key in const ['id', 'user_id', 'url', 'normalized_url', 'title', 'created_at', 'updated_at']) {
-      final value = row[key];
-      if (value != null) out[key] = value;
+  bool _removeUnknownLinkColumn(Map<String, dynamic> payload, Object error) {
+    final message = '$error';
+    final patterns = [
+      RegExp(r'column\s+"?([a-zA-Z0-9_]+)"?\s+does not exist', caseSensitive: false),
+      RegExp(r"find the '([a-zA-Z0-9_]+)' column", caseSensitive: false),
+      RegExp(r"'([a-zA-Z0-9_]+)'\s+column", caseSensitive: false),
+    ];
+
+    for (final pattern in patterns) {
+      final match = pattern.firstMatch(message);
+      final key = match?.group(1);
+      if (key == null || key.isEmpty) continue;
+      if (payload.containsKey(key)) {
+        payload.remove(key);
+        return true;
+      }
     }
-    return out;
+    return false;
   }
 
   Future<void> markDeleted(String userId, String normalizedUrl) async {
