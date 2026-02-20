@@ -1998,7 +1998,17 @@ class Metadata {
       ]);
 
       if (_isThreadsDomain(finalDomain)) {
-        threadProfileImage = _extractThreadsProfileImageFromDocument(document, finalUrl);
+        final threadContentCandidates = _extractThreadMediaUrlsFromDocument(
+          document,
+          finalUrl,
+          image,
+          includeMeta: false,
+        );
+        threadProfileImage = _extractThreadsProfileImageFromDocument(
+          document,
+          finalUrl,
+          contentMediaUrls: threadContentCandidates,
+        );
         threadMediaUrls = _extractThreadMediaUrlsFromDocument(
           document,
           finalUrl,
@@ -2198,17 +2208,23 @@ class Metadata {
 
   static bool _isNotBlank(String? value) => value != null && value.trim().isNotEmpty;
 
-  static String? _extractThreadsProfileImageFromDocument(dynamic doc, Uri baseUrl) {
+  static String? _extractThreadsProfileImageFromDocument(dynamic doc, Uri baseUrl, {List<String> contentMediaUrls = const []}) {
     final candidates = <String>[];
 
-    void addCandidate(String? raw, {bool force = false}) {
+    void addCandidate(String? raw) {
       final normalized = _normalizeText(raw);
       if (normalized == null || normalized.startsWith('data:')) return;
       final resolved = baseUrl.resolve(normalized).toString();
       final lower = resolved.toLowerCase();
       if (!lower.startsWith('http://') && !lower.startsWith('https://')) return;
-      if (!force && !_looksLikeThreadsProfileImage(lower)) return;
       candidates.add(resolved);
+    }
+
+    bool overlapsContent(String url) {
+      for (final media in contentMediaUrls) {
+        if (_urlsPointToSameResource(url, media)) return true;
+      }
+      return false;
     }
 
     void addMeta(String selector) {
@@ -2218,7 +2234,7 @@ class Metadata {
     }
 
     for (final candidate in _threadProfileImageHintsFromScripts(doc, baseUrl)) {
-      addCandidate(candidate, force: true);
+      addCandidate(candidate);
     }
 
     addMeta('meta[property="twitter:image"]');
@@ -2239,14 +2255,32 @@ class Metadata {
     }
 
     final unique = _mergeUniqueUrls([], candidates);
+
     for (final url in unique) {
-      if (_isThreadsBrandLogoUrl(url.toLowerCase())) continue;
+      final lower = url.toLowerCase();
+      if (_isThreadsBrandLogoUrl(lower)) continue;
+      if (!_looksLikeThreadsProfileImage(lower)) continue;
+      if (overlapsContent(url)) continue;
       return url;
     }
+
+    for (final url in unique) {
+      final lower = url.toLowerCase();
+      if (_isThreadsBrandLogoUrl(lower)) continue;
+      if (overlapsContent(url)) continue;
+      return url;
+    }
+
+    for (final url in unique) {
+      final lower = url.toLowerCase();
+      if (_isThreadsBrandLogoUrl(lower)) continue;
+      if (_looksLikeThreadsProfileImage(lower)) return url;
+    }
+
     return null;
   }
 
-  static List<String> _extractThreadMediaUrlsFromDocument(dynamic doc, Uri baseUrl, String? previewImage, {String? profileImage}) {
+  static List<String> _extractThreadMediaUrlsFromDocument(dynamic doc, Uri baseUrl, String? previewImage, {String? profileImage, bool includeMeta = true}) {
     final selectorCandidates = _firstImageCandidatesFromSelectors(doc, const [
       'article img',
       'main img',
@@ -2256,7 +2290,7 @@ class Metadata {
       '.x1lliihq img',
     ]).map((raw) => baseUrl.resolve(raw).toString());
 
-    final metaCandidates = _threadMediaFromMeta(doc, baseUrl);
+    final metaCandidates = includeMeta ? _threadMediaFromMeta(doc, baseUrl) : const <String>[];
     final scriptCandidates = _threadMediaFromScripts(doc, baseUrl);
     final filtered = <String>[];
     for (final url in [...metaCandidates, ...selectorCandidates, ...scriptCandidates]) {
