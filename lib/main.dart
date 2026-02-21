@@ -910,7 +910,14 @@ class AppController extends StateNotifier<AppState> {
       final nextTitle = (title.isEmpty || title == item.url) ? (meta.title ?? item.title) : item.title;
       final nextDescription = description.isEmpty ? (meta.description ?? item.description) : item.description;
       final nextImage = image.isEmpty ? (meta.image ?? meta.mediaUrls.firstOrNull ?? item.imageUrl) : item.imageUrl;
-      final fallbackFavicon = isThreads ? meta.profileImage : (meta.profileImage ?? meta.favicon);
+      final sanitizedThreadsProfile = isThreads
+          ? _sanitizeThreadsProfileImage(
+              meta.profileImage,
+              previewImage: meta.image ?? meta.mediaUrls.firstOrNull,
+              bodyMediaUrls: meta.mediaUrls,
+            )
+          : null;
+      final fallbackFavicon = isThreads ? sanitizedThreadsProfile : (meta.profileImage ?? meta.favicon);
       final nextFavicon = (favicon.isEmpty || needsThreadsProfile) ? (fallbackFavicon ?? item.faviconUrl) : item.faviconUrl;
       final nextMediaUrls = item.mediaUrls.isEmpty ? meta.mediaUrls : item.mediaUrls;
 
@@ -1079,6 +1086,9 @@ class AppController extends StateNotifier<AppState> {
       final now = DateTime.now();
       final autoTag = _domainTag(meta.domain);
       final isThreads = _isThreadsDomainForUi(meta.domain);
+      final threadsProfileImage = isThreads
+          ? _sanitizeThreadsProfileImage(meta.profileImage, previewImage: previewImage, bodyMediaUrls: bodyMediaUrls)
+          : null;
 
       LinkItem savedItem;
       
@@ -1088,7 +1098,7 @@ class AppController extends StateNotifier<AppState> {
           description: meta.description ?? existing.description,
           imageUrl: previewImage ?? existing.imageUrl,
           faviconUrl: isThreads
-              ? (meta.profileImage ?? (existing.faviconUrl.isEmpty ? '' : existing.faviconUrl))
+              ? (threadsProfileImage ?? (existing.faviconUrl.isEmpty ? '' : existing.faviconUrl))
               : (meta.profileImage ?? (existing.faviconUrl.isEmpty ? meta.favicon : existing.faviconUrl)),
           mediaUrls: bodyMediaUrls.isEmpty ? existing.mediaUrls : bodyMediaUrls,
           note: (note == null || note.isEmpty) ? existing.note : note,
@@ -1107,7 +1117,7 @@ class AppController extends StateNotifier<AppState> {
           description: meta.description ?? '',
           imageUrl: previewImage ?? '',
           domain: meta.domain,
-          faviconUrl: isThreads ? (meta.profileImage ?? '') : (meta.profileImage ?? meta.favicon),
+          faviconUrl: isThreads ? (threadsProfileImage ?? '') : (meta.profileImage ?? meta.favicon),
           createdAt: now,
           sharedAt: now, // 최초 저장 시 정렬용 시간 설정
           updatedAt: now,
@@ -1131,6 +1141,22 @@ class AppController extends StateNotifier<AppState> {
       debugPrint('addLink fatal error: $e');
       return null;
     }
+  }
+
+  String? _sanitizeThreadsProfileImage(String? rawProfileImage, {String? previewImage, List<String> bodyMediaUrls = const []}) {
+    final candidate = rawProfileImage?.trim();
+    if (candidate == null || candidate.isEmpty) return null;
+    if (!candidate.startsWith('http://') && !candidate.startsWith('https://')) return null;
+
+    final lower = candidate.toLowerCase();
+    if (_isThreadsBrandLogoUrl(lower)) return null;
+
+    if (_urlsPointToSameResource(candidate, previewImage)) return null;
+    for (final media in bodyMediaUrls) {
+      if (_urlsPointToSameResource(candidate, media)) return null;
+    }
+
+    return candidate;
   }
 
   bool isGenericTitle(String title) {
@@ -4437,10 +4463,6 @@ String? _threadsProfileFromStored(LinkItem item) {
 bool _isThreadsUsableProfileThumbnail(LinkItem item, String url) {
   final lower = url.toLowerCase();
   if (_isThreadsBrandLogoUrl(lower)) return false;
-
-  // URL 자체가 강력하게 프로필 이미지처럼 생겼다면, 본문 이미지와 겹치더라도 썸네일로 사용
-  // (작성자가 본인 사진을 게시글에 올릴 수도 있으므로)
-  if (Metadata._looksLikeThreadsProfileImage(lower)) return true;
 
   if (_urlsPointToSameResource(url, item.imageUrl)) return false;
   for (final media in item.mediaUrls) {
