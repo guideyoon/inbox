@@ -945,6 +945,20 @@ class AppController extends StateNotifier<AppState> {
     }
   }
 
+  void _triggerMetadataBackfill(LinkItem item) {
+    unawaited(() async {
+      final latest = (await repo.links()).where((e) => e.id == item.id).firstOrNull ?? item;
+      final backfilled = await _backfillLinkMetadata(latest);
+      if (backfilled == null) return;
+      await repo.upsert(backfilled);
+      if (backfilled.tags.isNotEmpty) {
+        await repo.ensureTags(backfilled.tags);
+      }
+      await refresh();
+      _triggerBackgroundSync();
+    }());
+  }
+
   void _triggerBackgroundSync() {
     final userId = _userId;
     if (userId == null) return;
@@ -1073,12 +1087,17 @@ class AppController extends StateNotifier<AppState> {
       final existing = state.links.where((e) => e.normalizedUrl == normalized).firstOrNull;
       
       Meta meta;
-      try {
-        meta = await Metadata.fetch(url);
-      } catch (e) {
-        debugPrint('addLink metadata fetch failed: $e');
+      if (source == 'shared') {
         final uri = Uri.tryParse(url);
         meta = Meta(domain: uri?.host ?? '', favicon: '');
+      } else {
+        try {
+          meta = await Metadata.fetch(url).timeout(const Duration(seconds: 4));
+        } catch (e) {
+          debugPrint('addLink metadata fetch failed: $e');
+          final uri = Uri.tryParse(url);
+          meta = Meta(domain: uri?.host ?? '', favicon: '');
+        }
       }
 
       final previewImage = meta.image ?? meta.mediaUrls.firstOrNull;
@@ -1135,6 +1154,9 @@ class AppController extends StateNotifier<AppState> {
         await repo.ensureTags(savedItem.tags);
       }
       await refresh();
+      if (source == 'shared' && _needsMetadataBackfill(savedItem)) {
+        _triggerMetadataBackfill(savedItem);
+      }
       _triggerBackgroundSync();
       return savedItem;
     } catch (e) {
@@ -1150,6 +1172,7 @@ class AppController extends StateNotifier<AppState> {
 
     final lower = candidate.toLowerCase();
     if (_isThreadsBrandLogoUrl(lower)) return null;
+    if (!Metadata._looksLikeThreadsProfileImage(lower)) return null;
 
     if (_urlsPointToSameResource(candidate, previewImage)) return null;
     for (final media in bodyMediaUrls) {
@@ -2278,39 +2301,22 @@ class Metadata {
 
     final unique = _mergeUniqueUrls([], candidates);
 
-    // 우선순위가 높은 후보부터 결정 로직 적용
     for (final url in unique) {
       final lower = url.toLowerCase();
       if (_isThreadsBrandLogoUrl(lower)) continue;
       if (!_looksLikeThreadsProfileImage(lower)) continue;
-      // 본문과 겹치더라도 강한 프로필 이미지 패턴이면 허용할 수도 있지만,
-      // 여기서는 일단 전통적인 순서 유지
       if (overlapsContent(url)) continue;
       return url;
     }
 
-    for (final url in unique) {
-      final lower = url.toLowerCase();
-      if (_isThreadsBrandLogoUrl(lower)) continue;
-      if (overlapsContent(url)) continue;
-      return url;
-    }
-
-    for (final url in unique) {
-      final lower = url.toLowerCase();
-      if (_isThreadsBrandLogoUrl(lower)) continue;
-      if (_looksLikeThreadsProfileImage(lower)) return url;
-    }
-
-    // [보강] 본문 미디어가 아예 없는 경우엔, 후보 중 브랜드 로고가 아니면 무엇이든 프로필 이미지로 채택
-    // (보통 미디어가 없는 글은 og:image가 프로필 이미지가 됨)
     if (contentMediaUrls.isEmpty) {
       for (final url in unique) {
-        if (!_isThreadsBrandLogoUrl(url.toLowerCase())) return url;
+        final lower = url.toLowerCase();
+        if (_isThreadsBrandLogoUrl(lower)) continue;
+        if (_looksLikeThreadsProfileImage(lower)) return url;
       }
     }
 
-    // 확실한 프로필 이미지가 없으면 null 반환 (게시글 이미지가 섞여 들어가는 것 방지)
     return null;
   }
 
@@ -2430,8 +2436,8 @@ class Metadata {
 
       final normalizedScript = text
           .replaceAll(r'\/', '/')
-          .replaceAll(r'/', '/')
-          .replaceAll(r'&', '&')
+          .replaceAll(r'\u002F', '/')
+          .replaceAll(r'\u0026', '&')
           .replaceAll(r'\"', '"')
           .replaceAll('&amp;', '&');
 
@@ -2482,12 +2488,7 @@ class Metadata {
     if (lowerUrl.contains('profilepicture')) return true;
     if (lowerUrl.contains('/profile')) return true;
     if (lowerUrl.contains('/avatar/')) return true;
-    if (lowerUrl.contains('s150x150')) return true;
-    if (lowerUrl.contains('s320x320')) return true;
     if (lowerUrl.contains('avatar')) return true;
-    // FB/IG CDN 파라미터 중 프로필 관련 힌트 (sid, cat 등 조합)
-    if (lowerUrl.contains('_nc_sid=') && (lowerUrl.contains('c01ad') || lowerUrl.contains('dbb1b') || lowerUrl.contains('5f2066'))) return true;
-    if (lowerUrl.contains('_nc_cat=') && (lowerUrl.contains('/v/t51.') || lowerUrl.contains('t51.2885-19'))) return true; 
     if (lowerUrl.contains('/v/t51.2885-19/')) return true;
     return false;
   }
@@ -4463,6 +4464,7 @@ String? _threadsProfileFromStored(LinkItem item) {
 bool _isThreadsUsableProfileThumbnail(LinkItem item, String url) {
   final lower = url.toLowerCase();
   if (_isThreadsBrandLogoUrl(lower)) return false;
+  if (!Metadata._looksLikeThreadsProfileImage(lower)) return false;
 
   if (_urlsPointToSameResource(url, item.imageUrl)) return false;
   for (final media in item.mediaUrls) {
