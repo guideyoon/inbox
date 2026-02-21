@@ -576,6 +576,9 @@ class AppController extends StateNotifier<AppState> {
   final CloudSyncService? cloud;
   StreamSubscription<AuthState>? _authSub;
   Timer? _autoSyncTimer;
+  Timer? _sharePollTimer;
+  bool _sharedBurstRunning = false;
+  bool _sharePollInFlight = false;
 
   String? get _userId => _cloudConfigured ? Supabase.instance.client.auth.currentUser?.id : null;
 
@@ -599,6 +602,7 @@ class AppController extends StateNotifier<AppState> {
   void dispose() {
     _authSub?.cancel();
     _stopAutoSync();
+    _stopSharePolling();
     super.dispose();
   }
 
@@ -889,7 +893,7 @@ class AppController extends StateNotifier<AppState> {
     final favicon = item.faviconUrl.trim();
     final isThreads = _isThreadsDomainForUi(item.domain);
 
-    final missingTitle = title.isEmpty || title == item.url;
+    final missingTitle = title.isEmpty || title == item.url || isGenericTitle(title);
     final missingDescription = description.isEmpty;
     final missingVisual = image.isEmpty && favicon.isEmpty && item.mediaUrls.isEmpty;
     final missingThreadsProfile = isThreads && _threadsProfileFromStored(item) == null;
@@ -906,8 +910,11 @@ class AppController extends StateNotifier<AppState> {
       final favicon = item.faviconUrl.trim();
 
       final isThreads = _isThreadsDomainForUi(item.domain);
+      final threadsQuickAvatar = isThreads
+          ? (_threadsAvatarFallbackFromUrl(item.url) ?? _threadsAvatarFallbackFromText(item.title) ?? _threadsAvatarFallbackFromText(item.description) ?? _threadsAvatarFallbackFromText(meta.title))
+          : null;
       final needsThreadsProfile = isThreads && _threadsProfileFromStored(item) == null;
-      final nextTitle = (title.isEmpty || title == item.url) ? (meta.title ?? item.title) : item.title;
+      final nextTitle = (title.isEmpty || title == item.url || isGenericTitle(title)) ? (meta.title ?? item.title) : item.title;
       final nextDescription = description.isEmpty ? (meta.description ?? item.description) : item.description;
       final nextImage = image.isEmpty ? (meta.image ?? meta.mediaUrls.firstOrNull ?? item.imageUrl) : item.imageUrl;
       final sanitizedThreadsProfile = isThreads
@@ -917,7 +924,7 @@ class AppController extends StateNotifier<AppState> {
               bodyMediaUrls: meta.mediaUrls,
             )
           : null;
-      final fallbackFavicon = isThreads ? sanitizedThreadsProfile : (meta.profileImage ?? meta.favicon);
+      final fallbackFavicon = isThreads ? (sanitizedThreadsProfile ?? threadsQuickAvatar) : (meta.profileImage ?? meta.favicon);
       final nextFavicon = (favicon.isEmpty || needsThreadsProfile) ? (fallbackFavicon ?? item.faviconUrl) : item.faviconUrl;
       final nextMediaUrls = item.mediaUrls.isEmpty ? meta.mediaUrls : item.mediaUrls;
 
@@ -945,17 +952,65 @@ class AppController extends StateNotifier<AppState> {
     }
   }
 
+  void _triggerSharedBurst() {
+    if (_sharedBurstRunning) return;
+    _sharedBurstRunning = true;
+
+    unawaited(() async {
+      final startedAt = DateTime.now();
+      try {
+        while (mounted && DateTime.now().difference(startedAt) < const Duration(seconds: 15)) {
+          await ingestShared();
+          final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
+          final waitMs = elapsedMs < 3000 ? 120 : 300;
+          await Future<void>.delayed(Duration(milliseconds: waitMs));
+        }
+      } finally {
+        _sharedBurstRunning = false;
+      }
+    }());
+  }
+
+  void _startSharePolling() {
+    _sharePollTimer?.cancel();
+    _sharePollTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
+      if (!mounted || _sharePollInFlight) return;
+      _sharePollInFlight = true;
+      unawaited(() async {
+        try {
+          await ingestShared();
+        } finally {
+          _sharePollInFlight = false;
+        }
+      }());
+    });
+  }
+
+  void _stopSharePolling() {
+    _sharePollTimer?.cancel();
+    _sharePollTimer = null;
+  }
+
   void _triggerMetadataBackfill(LinkItem item) {
     unawaited(() async {
-      final latest = (await repo.links()).where((e) => e.id == item.id).firstOrNull ?? item;
-      final backfilled = await _backfillLinkMetadata(latest);
-      if (backfilled == null) return;
-      await repo.upsert(backfilled);
-      if (backfilled.tags.isNotEmpty) {
-        await repo.ensureTags(backfilled.tags);
+      LinkItem latest = (await repo.links()).where((e) => e.id == item.id).firstOrNull ?? item;
+
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final backfilled = await _backfillLinkMetadata(latest);
+        if (backfilled != null) {
+          await repo.upsert(backfilled);
+          if (backfilled.tags.isNotEmpty) {
+            await repo.ensureTags(backfilled.tags);
+          }
+          await refresh();
+          _triggerBackgroundSync();
+          return;
+        }
+
+        if (!mounted) return;
+        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        latest = (await repo.links()).where((e) => e.id == item.id).firstOrNull ?? latest;
       }
-      await refresh();
-      _triggerBackgroundSync();
     }());
   }
 
@@ -966,7 +1021,7 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> onAppResumed() async {
-    await ingestShared();
+    _triggerSharedBurst();
     await checkClipboard();
     _triggerBackgroundSync();
   }
@@ -990,13 +1045,13 @@ class AppController extends StateNotifier<AppState> {
         userEmail: user?.email,
       );
       _bindAuthState();
+      _startSharePolling();
+      _triggerSharedBurst();
       await refresh();
       if (user != null) {
         _startAutoSync(user.id);
         await _syncOnLogin(user.id);
       }
-      // 공유 링크는 비동기로 처리 (UI 블로킹 방지)
-      _processSharedLinksInBackground();
     } catch (e) {
       // 초기화 실패 시에도 앱이 로드되도록 함
       if (user == null) {
@@ -1010,17 +1065,11 @@ class AppController extends StateNotifier<AppState> {
         userEmail: user?.email,
       );
       _bindAuthState();
+      _startSharePolling();
+      _triggerSharedBurst();
       if (user != null) {
         await _syncOnLogin(user.id);
       }
-    }
-  }
-
-  Future<void> _processSharedLinksInBackground() async {
-    try {
-      await ingestShared();
-    } catch (_) {
-      // 공유 처리 실패 무시
     }
   }
 
@@ -1105,8 +1154,14 @@ class AppController extends StateNotifier<AppState> {
       final now = DateTime.now();
       final autoTag = _domainTag(meta.domain);
       final isThreads = _isThreadsDomainForUi(meta.domain);
+      final threadsQuickAvatar = isThreads
+          ? (_threadsAvatarFallbackFromUrl(url) ??
+              _threadsAvatarFallbackFromText(title) ??
+              _threadsAvatarFallbackFromText(meta.title) ??
+              _threadsAvatarFallbackFromText(meta.description))
+          : null;
       final threadsProfileImage = isThreads
-          ? _sanitizeThreadsProfileImage(meta.profileImage, previewImage: previewImage, bodyMediaUrls: bodyMediaUrls)
+          ? (_sanitizeThreadsProfileImage(meta.profileImage, previewImage: previewImage, bodyMediaUrls: bodyMediaUrls) ?? threadsQuickAvatar)
           : null;
 
       LinkItem savedItem;
@@ -1125,8 +1180,13 @@ class AppController extends StateNotifier<AppState> {
           sharedAt: now, // 재공유 시에만 정렬용 시간 갱신
           updatedAt: now,
         );
-        await repo.upsert(savedItem);
-        await repo.ensureTags(savedItem.tags);
+        if (source == 'shared') {
+          _applySavedLinkOptimistically(savedItem);
+          _persistSharedLink(savedItem);
+        } else {
+          await repo.upsert(savedItem);
+          await repo.ensureTags(savedItem.tags);
+        }
       } else {
         savedItem = LinkItem(
           id: _uuid.v4(),
@@ -1150,11 +1210,21 @@ class AppController extends StateNotifier<AppState> {
           lastOpenedAt: null,
           mediaUrls: bodyMediaUrls,
         );
-        await repo.upsert(savedItem);
-        await repo.ensureTags(savedItem.tags);
+        if (source == 'shared') {
+          _applySavedLinkOptimistically(savedItem);
+          _persistSharedLink(savedItem);
+        } else {
+          await repo.upsert(savedItem);
+          await repo.ensureTags(savedItem.tags);
+        }
       }
-      await refresh();
-      if (source == 'shared' && _needsMetadataBackfill(savedItem)) {
+      if (source != 'shared') {
+        await refresh();
+      }
+      if (source == 'shared') {
+        _triggerSharedBurst();
+      }
+      if (source == 'shared') {
         _triggerMetadataBackfill(savedItem);
       }
       _triggerBackgroundSync();
@@ -1165,6 +1235,20 @@ class AppController extends StateNotifier<AppState> {
     }
   }
 
+  void _applySavedLinkOptimistically(LinkItem savedItem) {
+    final links = state.links.where((e) => e.id != savedItem.id && e.normalizedUrl != savedItem.normalizedUrl).toList()
+      ..add(savedItem)
+      ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+    state = state.copyWith(links: links);
+  }
+
+  void _persistSharedLink(LinkItem savedItem) {
+    unawaited(() async {
+      await repo.upsert(savedItem);
+      await repo.ensureTags(savedItem.tags);
+    }());
+  }
+
   String? _sanitizeThreadsProfileImage(String? rawProfileImage, {String? previewImage, List<String> bodyMediaUrls = const []}) {
     final candidate = rawProfileImage?.trim();
     if (candidate == null || candidate.isEmpty) return null;
@@ -1172,7 +1256,6 @@ class AppController extends StateNotifier<AppState> {
 
     final lower = candidate.toLowerCase();
     if (_isThreadsBrandLogoUrl(lower)) return null;
-    if (!Metadata._looksLikeThreadsProfileImage(lower)) return null;
 
     if (_urlsPointToSameResource(candidate, previewImage)) return null;
     for (final media in bodyMediaUrls) {
@@ -2309,11 +2392,17 @@ class Metadata {
       return url;
     }
 
+    for (final url in unique) {
+      final lower = url.toLowerCase();
+      if (_isThreadsBrandLogoUrl(lower)) continue;
+      if (overlapsContent(url)) continue;
+      return url;
+    }
+
     if (contentMediaUrls.isEmpty) {
       for (final url in unique) {
-        final lower = url.toLowerCase();
-        if (_isThreadsBrandLogoUrl(lower)) continue;
-        if (_looksLikeThreadsProfileImage(lower)) return url;
+        if (_isThreadsBrandLogoUrl(url.toLowerCase())) continue;
+        return url;
       }
     }
 
@@ -4458,13 +4547,37 @@ String? _threadsProfileFromStored(LinkItem item) {
   if (favicon != null && _isThreadsUsableProfileThumbnail(item, favicon)) {
     return favicon;
   }
+
+  final generated = _threadsAvatarFallbackFromUrl(item.url) ?? _threadsAvatarFallbackFromText(item.title) ?? _threadsAvatarFallbackFromText(item.description);
+  if (generated != null && _isThreadsUsableProfileThumbnail(item, generated)) {
+    return generated;
+  }
+
   return null;
+}
+
+String? _threadsAvatarFallbackFromUrl(String rawUrl) {
+  final uri = Uri.tryParse(rawUrl);
+  if (uri == null) return null;
+  final handleSeg = uri.pathSegments.where((s) => s.startsWith('@')).firstOrNull;
+  if (handleSeg == null) return null;
+  final handle = handleSeg.replaceFirst('@', '').trim();
+  if (handle.isEmpty) return null;
+  return 'https://unavatar.io/threads/$handle';
+}
+
+String? _threadsAvatarFallbackFromText(String? rawText) {
+  final text = rawText?.trim();
+  if (text == null || text.isEmpty) return null;
+  final match = RegExp(r'@([A-Za-z0-9._]+)').firstMatch(text);
+  final handle = match?.group(1)?.trim();
+  if (handle == null || handle.isEmpty) return null;
+  return 'https://unavatar.io/threads/$handle';
 }
 
 bool _isThreadsUsableProfileThumbnail(LinkItem item, String url) {
   final lower = url.toLowerCase();
   if (_isThreadsBrandLogoUrl(lower)) return false;
-  if (!Metadata._looksLikeThreadsProfileImage(lower)) return false;
 
   if (_urlsPointToSameResource(url, item.imageUrl)) return false;
   for (final media in item.mediaUrls) {
