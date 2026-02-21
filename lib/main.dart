@@ -317,6 +317,7 @@ class LinkItem {
     required this.domain,
     required this.createdAt,
     required this.updatedAt,
+    required this.sharedAt, // 정렬 전용 필드 추가
     required this.isRead,
     required this.isStarred,
     required this.isArchived,
@@ -341,6 +342,7 @@ class LinkItem {
   final String faviconUrl;
   final DateTime createdAt;
   final DateTime updatedAt;
+  final DateTime sharedAt; // 정렬 시 사용
   final bool isRead;
   final bool isStarred;
   final bool isArchived;
@@ -351,7 +353,7 @@ class LinkItem {
   final DateTime? lastOpenedAt;
   final List<String> mediaUrls;
 
-  LinkItem copyWith({bool? isRead, bool? isStarred, bool? isArchived, String? note, String? folderId, List<String>? tags, DateTime? updatedAt, DateTime? lastOpenedAt, String? title, String? description, String? imageUrl, String? faviconUrl, List<String>? mediaUrls}) {
+  LinkItem copyWith({bool? isRead, bool? isStarred, bool? isArchived, String? note, String? folderId, List<String>? tags, DateTime? updatedAt, DateTime? createdAt, DateTime? sharedAt, DateTime? lastOpenedAt, String? title, String? description, String? imageUrl, String? faviconUrl, List<String>? mediaUrls}) {
     return LinkItem(
       id: id,
       url: url,
@@ -361,8 +363,9 @@ class LinkItem {
       imageUrl: imageUrl ?? this.imageUrl,
       domain: domain,
       faviconUrl: faviconUrl ?? this.faviconUrl,
-      createdAt: createdAt,
+      createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
+      sharedAt: sharedAt ?? this.sharedAt,
       isRead: isRead ?? this.isRead,
       isStarred: isStarred ?? this.isStarred,
       isArchived: isArchived ?? this.isArchived,
@@ -386,6 +389,7 @@ class LinkItem {
         'favicon_url': faviconUrl,
         'created_at': createdAt.toIso8601String(),
         'updated_at': updatedAt.toIso8601String(),
+        'shared_at': sharedAt.toIso8601String(),
         'is_read': isRead ? 1 : 0,
         'is_starred': isStarred ? 1 : 0,
         'is_archived': isArchived ? 1 : 0,
@@ -408,6 +412,7 @@ class LinkItem {
         faviconUrl: (m['favicon_url'] as String?) ?? '',
         createdAt: DateTime.parse(m['created_at'] as String),
         updatedAt: DateTime.parse(m['updated_at'] as String),
+        sharedAt: DateTime.parse((m['shared_at'] as String?) ?? (m['created_at'] as String)),
         isRead: (m['is_read'] as int? ?? 0) == 1,
         isStarred: (m['is_starred'] as int? ?? 0) == 1,
         isArchived: (m['is_archived'] as int? ?? 0) == 1,
@@ -864,6 +869,7 @@ class AppController extends StateNotifier<AppState> {
       faviconUrl: remoteFavicon.isNotEmpty ? remote.faviconUrl : (local?.faviconUrl ?? ''),
       createdAt: local?.createdAt ?? remote.createdAt,
       updatedAt: remote.updatedAt,
+      sharedAt: remote.sharedAt,
       isRead: remote.isRead,
       isStarred: remote.isStarred,
       isArchived: remote.isArchived,
@@ -925,6 +931,7 @@ class AppController extends StateNotifier<AppState> {
         faviconUrl: nextFavicon,
         mediaUrls: nextMediaUrls,
         updatedAt: DateTime.now(),
+        // sharedAt은 명시적으로 전달하지 않으므로 copyWith에서 기존 값 유지
       );
     } catch (_) {
       return null;
@@ -1020,55 +1027,13 @@ class AppController extends StateNotifier<AppState> {
   }
 
   List<LinkItem> get inbox {
-    final base = state.links.where((e) => !e.isArchived).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final base = state.links.where((e) => !e.isArchived).toList()..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
     return switch (state.filter) {
       InboxFilter.unread => base.where((e) => !e.isRead).toList(),
       InboxFilter.starred => base.where((e) => e.isStarred).toList(),
       InboxFilter.today => base.where((e) => DateTime.now().difference(e.createdAt).inDays == 0).toList(),
       InboxFilter.all => base,
     };
-  }
-
-  List<LinkItem> get todayPicks {
-    final now = DateTime.now();
-    final candidates = state.links.where((e) => !e.isArchived).toList();
-    candidates.sort((a, b) => _readPriorityScore(b, now).compareTo(_readPriorityScore(a, now)));
-    return candidates.take(5).toList();
-  }
-
-  double _readPriorityScore(LinkItem item, DateTime now) {
-    var score = 0.0;
-
-    if (!item.isRead) {
-      score += 6;
-    } else {
-      score += 1;
-    }
-
-    if (item.isStarred) {
-      score += 3;
-    }
-
-    final ageDays = now.difference(item.createdAt).inDays;
-    if (ageDays <= 2) {
-      score += 2;
-    } else if (ageDays <= 7) {
-      score += 1;
-    } else if (ageDays > 30) {
-      score -= 0.5;
-    }
-
-    if (item.lastOpenedAt == null) {
-      score += 1;
-    } else if (now.difference(item.lastOpenedAt!).inDays >= 14) {
-      score += 1;
-    }
-
-    if (item.note.trim().isNotEmpty) {
-      score += 0.5;
-    }
-
-    return score;
   }
 
   List<LinkItem> get searched => state.links.where((e) {
@@ -1089,67 +1054,83 @@ class AppController extends StateNotifier<AppState> {
         };
         return queryOk && domainOk && tagOk && periodOk;
       }).toList()
-        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
 
   Future<LinkItem?> addLink(String raw, {String? title, String? note, String? source}) async {
-    final input = _sanitizeIncomingUrl(raw);
-    if (input.isEmpty || _isAuthCallbackUrl(input)) return null;
-    final url = _withScheme(input);
-    if (!_isUrl(url) || _isAuthCallbackUrl(url)) return null;
-    final normalized = _normalize(url);
-    final existing = state.links.where((e) => e.normalizedUrl == normalized).firstOrNull;
-    final meta = await Metadata.fetch(url);
-    final previewImage = meta.image ?? meta.mediaUrls.firstOrNull;
-    final bodyMediaUrls = meta.mediaUrls;
-    final now = DateTime.now();
-    final autoTag = _domainTag(meta.domain);
-    final isThreads = _isThreadsDomainForUi(meta.domain);
+    try {
+      final input = _sanitizeIncomingUrl(raw);
+      if (input.isEmpty || _isAuthCallbackUrl(input)) return null;
+      final url = _withScheme(input);
+      if (!_isUrl(url) || _isAuthCallbackUrl(url)) return null;
+      final normalized = _normalize(url);
+      final existing = state.links.where((e) => e.normalizedUrl == normalized).firstOrNull;
+      
+      Meta meta;
+      try {
+        meta = await Metadata.fetch(url);
+      } catch (e) {
+        debugPrint('addLink metadata fetch failed: $e');
+        final uri = Uri.tryParse(url);
+        meta = Meta(domain: uri?.host ?? '', favicon: '');
+      }
 
-    LinkItem savedItem;
-    
-    if (existing != null) {
-      savedItem = existing.copyWith(
-        title: title ?? meta.title ?? existing.title,
-        description: meta.description ?? existing.description,
-        imageUrl: previewImage ?? existing.imageUrl,
-        faviconUrl: isThreads
-            ? (meta.profileImage ?? existing.faviconUrl)
-            : (meta.profileImage ?? (existing.faviconUrl.isEmpty ? meta.favicon : existing.faviconUrl)),
-        mediaUrls: bodyMediaUrls.isEmpty ? existing.mediaUrls : bodyMediaUrls,
-        note: (note == null || note.isEmpty) ? existing.note : note,
-        tags: {...existing.tags, autoTag}.toList(),
-        updatedAt: now,
-      );
-      await repo.upsert(savedItem);
-      await repo.ensureTags(savedItem.tags);
-    } else {
-      savedItem = LinkItem(
-        id: _uuid.v4(),
-        url: url,
-        normalizedUrl: normalized,
-        title: title ?? meta.title ?? url,
-        description: meta.description ?? '',
-        imageUrl: previewImage ?? '',
-        domain: meta.domain,
-        faviconUrl: isThreads ? (meta.profileImage ?? '') : (meta.profileImage ?? meta.favicon),
-        createdAt: now,
-        updatedAt: now,
-        isRead: false,
-        isStarred: false,
-        isArchived: false,
-        tags: [autoTag],
-        folderId: null,
-        note: note ?? '',
-        sourceApp: source,
-        lastOpenedAt: null,
-        mediaUrls: bodyMediaUrls,
-      );
-      await repo.upsert(savedItem);
-      await repo.ensureTags(savedItem.tags);
+      final previewImage = meta.image ?? meta.mediaUrls.firstOrNull;
+      final bodyMediaUrls = meta.mediaUrls;
+      final now = DateTime.now();
+      final autoTag = _domainTag(meta.domain);
+      final isThreads = _isThreadsDomainForUi(meta.domain);
+
+      LinkItem savedItem;
+      
+      if (existing != null) {
+        savedItem = existing.copyWith(
+          title: title ?? (meta.title != null && meta.title!.isNotEmpty ? meta.title : existing.title),
+          description: meta.description ?? existing.description,
+          imageUrl: previewImage ?? existing.imageUrl,
+          faviconUrl: isThreads
+              ? (meta.profileImage ?? (existing.faviconUrl.isEmpty ? '' : existing.faviconUrl))
+              : (meta.profileImage ?? (existing.faviconUrl.isEmpty ? meta.favicon : existing.faviconUrl)),
+          mediaUrls: bodyMediaUrls.isEmpty ? existing.mediaUrls : bodyMediaUrls,
+          note: (note == null || note.isEmpty) ? existing.note : note,
+          tags: {...existing.tags, autoTag}.toList(),
+          sharedAt: now, // 재공유 시에만 정렬용 시간 갱신
+          updatedAt: now,
+        );
+        await repo.upsert(savedItem);
+        await repo.ensureTags(savedItem.tags);
+      } else {
+        savedItem = LinkItem(
+          id: _uuid.v4(),
+          url: url,
+          normalizedUrl: normalized,
+          title: title ?? meta.title ?? url,
+          description: meta.description ?? '',
+          imageUrl: previewImage ?? '',
+          domain: meta.domain,
+          faviconUrl: isThreads ? (meta.profileImage ?? '') : (meta.profileImage ?? meta.favicon),
+          createdAt: now,
+          sharedAt: now, // 최초 저장 시 정렬용 시간 설정
+          updatedAt: now,
+          isRead: false,
+          isStarred: false,
+          isArchived: false,
+          tags: [autoTag],
+          folderId: null,
+          note: note ?? '',
+          sourceApp: source,
+          lastOpenedAt: null,
+          mediaUrls: bodyMediaUrls,
+        );
+        await repo.upsert(savedItem);
+        await repo.ensureTags(savedItem.tags);
+      }
+      await refresh();
+      _triggerBackgroundSync();
+      return savedItem;
+    } catch (e) {
+      debugPrint('addLink fatal error: $e');
+      return null;
     }
-    await refresh();
-    _triggerBackgroundSync();
-    return savedItem;
   }
 
   bool isGenericTitle(String title) {
@@ -1334,7 +1315,7 @@ class AppController extends StateNotifier<AppState> {
 
 class AppRepository {
   Database? _db;
-  static const _dbVersion = 3;
+  static const _dbVersion = 4; // 버전 상향
 
   Future<void> init() async {
     _db ??= await openDatabase(
@@ -1354,14 +1335,14 @@ class AppRepository {
 
   Future<void> _createSchema(Database db) async {
     await db.execute(
-      'CREATE TABLE IF NOT EXISTS links(id TEXT PRIMARY KEY,url TEXT,normalized_url TEXT UNIQUE,title TEXT,description TEXT,image_url TEXT,domain TEXT,favicon_url TEXT,created_at TEXT,updated_at TEXT,is_read INTEGER,is_starred INTEGER,is_archived INTEGER,tags TEXT,folder_id TEXT,note TEXT,source_app TEXT,last_opened_at TEXT,media_urls TEXT)',
+      'CREATE TABLE IF NOT EXISTS links(id TEXT PRIMARY KEY,url TEXT,normalized_url TEXT UNIQUE,title TEXT,description TEXT,image_url TEXT,domain TEXT,favicon_url TEXT,created_at TEXT,updated_at TEXT,shared_at TEXT,is_read INTEGER,is_starred INTEGER,is_archived INTEGER,tags TEXT,folder_id TEXT,note TEXT,source_app TEXT,last_opened_at TEXT,media_urls TEXT)',
     );
     await db.execute('CREATE TABLE IF NOT EXISTS tags(id TEXT PRIMARY KEY,name TEXT UNIQUE)');
     await db.execute('CREATE TABLE IF NOT EXISTS folders(id TEXT PRIMARY KEY,name TEXT UNIQUE,sort_order INTEGER)');
   }
 
   Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 3) {
+    if (oldVersion < 4) {
       await _repairSchema(db);
     }
   }
@@ -1385,6 +1366,7 @@ class AppRepository {
       'folder_id': 'TEXT',
       'created_at': 'TEXT',
       'updated_at': 'TEXT',
+      'shared_at': 'TEXT',
     };
     for (final entry in linkAdditions.entries) {
       if (!linkCols.contains(entry.key)) {
@@ -1395,6 +1377,7 @@ class AppRepository {
     final now = DateTime.now().toIso8601String();
     await db.rawUpdate("UPDATE links SET created_at = ? WHERE created_at IS NULL OR created_at = ''", [now]);
     await db.rawUpdate("UPDATE links SET updated_at = COALESCE(NULLIF(updated_at, ''), created_at, ?) WHERE updated_at IS NULL OR updated_at = ''", [now]);
+    await db.rawUpdate("UPDATE links SET shared_at = COALESCE(NULLIF(shared_at, ''), created_at, ?) WHERE shared_at IS NULL OR shared_at = ''", [now]);
 
     final folderCols = await _tableColumns(db, 'folders');
     if (!folderCols.contains('sort_order')) {
@@ -1724,6 +1707,7 @@ class CloudSyncService {
       final normalized = (row['normalized_url'] as String?) ?? _normalize(url);
       final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '') ?? DateTime.now();
       final updatedAt = DateTime.tryParse((row['updated_at'] as String?) ?? '') ?? createdAt;
+      final sharedAt = DateTime.tryParse((row['shared_at'] as String?) ?? '') ?? createdAt;
 
       out.add(LinkItem(
         id: (row['id'] as String?) ?? _uuid.v4(),
@@ -1736,6 +1720,7 @@ class CloudSyncService {
         faviconUrl: (row['favicon_url'] as String?) ?? '',
         createdAt: createdAt,
         updatedAt: updatedAt,
+        sharedAt: sharedAt,
         isRead: _toBool(row['is_read']),
         isStarred: _toBool(row['is_starred']),
         isArchived: _toBool(row['is_archived']),
@@ -2217,6 +2202,7 @@ class Metadata {
       final resolved = baseUrl.resolve(normalized).toString();
       final lower = resolved.toLowerCase();
       if (!lower.startsWith('http://') && !lower.startsWith('https://')) return;
+      if (candidates.contains(resolved)) return;
       candidates.add(resolved);
     }
 
@@ -2233,20 +2219,30 @@ class Metadata {
       }
     }
 
+    // 1. 스크립트 힌트 우선
     for (final candidate in _threadProfileImageHintsFromScripts(doc, baseUrl)) {
       addCandidate(candidate);
     }
 
+    // 2. 특정 메타 태그
     addMeta('meta[property="twitter:image"]');
     addMeta('meta[name="twitter:image"]');
     addMeta('meta[property="twitter:image:src"]');
     addMeta('meta[name="twitter:image:src"]');
     addMeta('meta[property="og:image:user_generated"]');
 
+    // 3. og:image는 언제나 후보로 추가 (단, 이후 본문 미디어와 중복 체크)
+    final ogImage = _findMeta(doc, ['og:image']);
+    if (ogImage != null) {
+      addCandidate(ogImage);
+    }
+
+    // 4. 스크립트 후보
     for (final candidate in _threadProfileImageCandidatesFromScripts(doc, baseUrl)) {
       addCandidate(candidate);
     }
 
+    // 5. 일반 이미지 중 선별
     final selectors = _firstImageCandidatesFromSelectors(doc, const ['img']);
     for (final raw in selectors) {
       if (_looksLikeThreadsProfileImage(raw.toLowerCase())) {
@@ -2256,10 +2252,13 @@ class Metadata {
 
     final unique = _mergeUniqueUrls([], candidates);
 
+    // 우선순위가 높은 후보부터 결정 로직 적용
     for (final url in unique) {
       final lower = url.toLowerCase();
       if (_isThreadsBrandLogoUrl(lower)) continue;
       if (!_looksLikeThreadsProfileImage(lower)) continue;
+      // 본문과 겹치더라도 강한 프로필 이미지 패턴이면 허용할 수도 있지만,
+      // 여기서는 일단 전통적인 순서 유지
       if (overlapsContent(url)) continue;
       return url;
     }
@@ -2277,6 +2276,15 @@ class Metadata {
       if (_looksLikeThreadsProfileImage(lower)) return url;
     }
 
+    // [보강] 본문 미디어가 아예 없는 경우엔, 후보 중 브랜드 로고가 아니면 무엇이든 프로필 이미지로 채택
+    // (보통 미디어가 없는 글은 og:image가 프로필 이미지가 됨)
+    if (contentMediaUrls.isEmpty) {
+      for (final url in unique) {
+        if (!_isThreadsBrandLogoUrl(url.toLowerCase())) return url;
+      }
+    }
+
+    // 확실한 프로필 이미지가 없으면 null 반환 (게시글 이미지가 섞여 들어가는 것 방지)
     return null;
   }
 
@@ -2451,6 +2459,10 @@ class Metadata {
     if (lowerUrl.contains('s150x150')) return true;
     if (lowerUrl.contains('s320x320')) return true;
     if (lowerUrl.contains('avatar')) return true;
+    // FB/IG CDN 파라미터 중 프로필 관련 힌트 (sid, cat 등 조합)
+    if (lowerUrl.contains('_nc_sid=') && (lowerUrl.contains('c01ad') || lowerUrl.contains('dbb1b') || lowerUrl.contains('5f2066'))) return true;
+    if (lowerUrl.contains('_nc_cat=') && (lowerUrl.contains('/v/t51.') || lowerUrl.contains('t51.2885-19'))) return true; 
+    if (lowerUrl.contains('/v/t51.2885-19/')) return true;
     return false;
   }
 
@@ -2945,7 +2957,6 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
     final c = ref.read(appProvider.notifier);
     final items = c.inbox;
     final grouped = _groupItems(items);
-    final picks = c.todayPicks;
 
     return Column(
       children: [
@@ -2972,61 +2983,6 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                 ),
                 TextButton(onPressed: c.saveCandidate, child: const Text('저장')),
                 IconButton(onPressed: c.dismissCandidate, icon: const Icon(Icons.close, size: 18)),
-              ],
-            ),
-          ),
-        if (state.filter == InboxFilter.all && picks.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('오늘 읽을 5개', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 8),
-                SizedBox(
-                  height: 94,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: picks.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) {
-                      final item = picks[i];
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(14),
-                        onTap: () => context.push('/detail/${item.id}'),
-                        child: Container(
-                          width: 220,
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _dashboardTitle(item),
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: item.isRead ? FontWeight.w500 : FontWeight.w700,
-                                ),
-                              ),
-                              const Spacer(),
-                              Text(
-                                '${item.domain} · ${_friendly(item.createdAt)}',
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 11, color: Color(0xFF8B95A1)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
               ],
             ),
           ),
@@ -3184,7 +3140,7 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
     final List<dynamic> rows = [];
     String? lastHeader;
     for (final item in items) {
-      final header = _dateHeader(item.createdAt);
+      final header = _dateHeader(item.sharedAt); // 정렬 기준인 sharedAt으로 헤더 그룹화
       if (header != lastHeader) {
         rows.add(header);
         lastHeader = header;
@@ -4225,7 +4181,7 @@ class FolderLinksPage extends ConsumerWidget {
     final folder = state.folders.where((e) => e.id == id).firstOrNull;
     if (folder == null) return const Scaffold(body: Center(child: Text('폴더를 찾을 수 없습니다.')));
 
-    final items = state.links.where((e) => e.folderId == id).toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final items = state.links.where((e) => e.folderId == id).toList()..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
 
     return Scaffold(
       appBar: AppBar(title: Text('${folder.name} (${items.length})')),
@@ -4481,6 +4437,11 @@ String? _threadsProfileFromStored(LinkItem item) {
 bool _isThreadsUsableProfileThumbnail(LinkItem item, String url) {
   final lower = url.toLowerCase();
   if (_isThreadsBrandLogoUrl(lower)) return false;
+
+  // URL 자체가 강력하게 프로필 이미지처럼 생겼다면, 본문 이미지와 겹치더라도 썸네일로 사용
+  // (작성자가 본인 사진을 게시글에 올릴 수도 있으므로)
+  if (Metadata._looksLikeThreadsProfileImage(lower)) return true;
+
   if (_urlsPointToSameResource(url, item.imageUrl)) return false;
   for (final media in item.mediaUrls) {
     if (_urlsPointToSameResource(url, media)) return false;
@@ -4506,8 +4467,12 @@ bool _urlsPointToSameResource(String? first, String? second) {
   String keyOf(String raw) {
     final uri = Uri.tryParse(raw);
     if (uri == null) return raw.toLowerCase();
-    final path = uri.path.isEmpty ? '/' : uri.path;
-    return '${uri.host.toLowerCase()}$path';
+    
+    // 쿼리 파라미터 제외하고 scheme, host, path만으로 비교
+    // 단, path 내의 해시값 등이 다를 수 있으므로 정규화가 더 필요할 수 있지만
+    // 여기서는 기본적으로 쿼리 파라미터 제거만으로도 많은 중복을 잡을 수 있음
+    final cleanPath = uri.path.isEmpty ? '/' : uri.path;
+    return '${uri.host.toLowerCase()}$cleanPath';
   }
 
   return keyOf(a) == keyOf(b);
