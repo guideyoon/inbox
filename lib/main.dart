@@ -20,12 +20,22 @@ import 'package:uuid/uuid.dart';
 
 const _uuid = Uuid();
 const _defaultSupabaseUrl = 'https://lcgvkyebcnkjwgptarax.supabase.co';
-const _defaultSupabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjZ3ZreWViY25randncHRhcmF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5ODg5OTMsImV4cCI6MjA4NjU2NDk5M30.UZeEQoqGB0fa6-S1a2YMTKawLS8vfXgjzSEbatdaUGU';
-const _supabaseUrl = String.fromEnvironment('SUPABASE_URL', defaultValue: _defaultSupabaseUrl);
-const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: _defaultSupabaseAnonKey);
+const _defaultSupabaseAnonKey =
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxjZ3ZreWViY25randncHRhcmF4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA5ODg5OTMsImV4cCI6MjA4NjU2NDk5M30.UZeEQoqGB0fa6-S1a2YMTKawLS8vfXgjzSEbatdaUGU';
+const _supabaseUrl = String.fromEnvironment(
+  'SUPABASE_URL',
+  defaultValue: _defaultSupabaseUrl,
+);
+const _supabaseAnonKey = String.fromEnvironment(
+  'SUPABASE_ANON_KEY',
+  defaultValue: _defaultSupabaseAnonKey,
+);
 const _mobileAuthRedirectUri = 'urlinbox://login-callback/';
 const _defaultWebAuthRedirectUri = 'https://inbox-19g.pages.dev/';
-const _configuredWebAuthRedirectUri = String.fromEnvironment('WEB_AUTH_REDIRECT', defaultValue: _defaultWebAuthRedirectUri);
+const _configuredWebAuthRedirectUri = String.fromEnvironment(
+  'WEB_AUTH_REDIRECT',
+  defaultValue: _defaultWebAuthRedirectUri,
+);
 
 String get _authRedirectUri {
   if (!kIsWeb) return _mobileAuthRedirectUri;
@@ -36,7 +46,8 @@ String get _authRedirectUri {
   }
 
   final current = Uri.base;
-  if ((current.scheme == 'http' || current.scheme == 'https') && current.host.isNotEmpty) {
+  if ((current.scheme == 'http' || current.scheme == 'https') &&
+      current.host.isNotEmpty) {
     final origin = '${current.scheme}://${current.authority}';
     return origin.endsWith('/') ? origin : '$origin/';
   }
@@ -45,8 +56,7 @@ String get _authRedirectUri {
 }
 
 bool get _cloudConfigured =>
-    _supabaseUrl.startsWith('https://') &&
-    _supabaseAnonKey.isNotEmpty;
+    _supabaseUrl.startsWith('https://') && _supabaseAnonKey.isNotEmpty;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -66,23 +76,35 @@ final cloudSyncProvider = Provider<CloudSyncService?>((_) {
   return CloudSyncService(Supabase.instance.client);
 });
 final appProvider = StateNotifierProvider<AppController, AppState>((ref) {
-  return AppController(ref.read(repoProvider), ref.read(reminderProvider), ref.read(cloudSyncProvider));
+  return AppController(
+    ref.read(repoProvider),
+    ref.read(reminderProvider),
+    ref.read(cloudSyncProvider),
+  );
 });
-final routerProvider = Provider<GoRouter>((_) => GoRouter(
-      initialLocation: '/',
-      overridePlatformDefaultLocation: true,
-      errorBuilder: (_, __) => const RootPage(),
-      routes: [
-        GoRoute(
-          path: '/',
-          builder: (_, __) => const RootPage(),
-          routes: [
-            GoRoute(path: 'detail/:id', builder: (_, s) => LinkDetailPage(id: s.pathParameters['id']!)),
-            GoRoute(path: 'folder/:id', builder: (_, s) => FolderLinksPage(id: s.pathParameters['id']!)),
-          ],
-        )
-      ],
-    ));
+final routerProvider = Provider<GoRouter>(
+  (_) => GoRouter(
+    initialLocation: '/',
+    overridePlatformDefaultLocation: true,
+    errorBuilder: (_, __) => const RootPage(),
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (_, __) => const RootPage(),
+        routes: [
+          GoRoute(
+            path: 'detail/:id',
+            builder: (_, s) => LinkDetailPage(id: s.pathParameters['id']!),
+          ),
+          GoRoute(
+            path: 'folder/:id',
+            builder: (_, s) => FolderLinksPage(id: s.pathParameters['id']!),
+          ),
+        ],
+      ),
+    ],
+  ),
+);
 
 class UrlInboxApp extends ConsumerWidget {
   const UrlInboxApp({super.key});
@@ -95,7 +117,7 @@ class UrlInboxApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(appProvider.select((s) => s.themeMode));
-    
+
     final lightTheme = ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -111,7 +133,12 @@ class UrlInboxApp extends ConsumerWidget {
         backgroundColor: _tossGreyBg,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(color: Color(0xFF191F28), fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+        titleTextStyle: TextStyle(
+          color: Color(0xFF191F28),
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
+        ),
         iconTheme: IconThemeData(color: Color(0xFF191F28)),
         elevation: 0,
       ),
@@ -124,19 +151,40 @@ class UrlInboxApp extends ConsumerWidget {
       chipTheme: ChipThemeData(
         backgroundColor: Colors.white,
         selectedColor: _tossBlue.withValues(alpha: 0.1),
-        labelStyle: const TextStyle(color: Color(0xFF4E5968), fontWeight: FontWeight.w600),
-        secondaryLabelStyle: const TextStyle(color: _tossBlue, fontWeight: FontWeight.w700),
+        labelStyle: const TextStyle(
+          color: Color(0xFF4E5968),
+          fontWeight: FontWeight.w600,
+        ),
+        secondaryLabelStyle: const TextStyle(
+          color: _tossBlue,
+          fontWeight: FontWeight.w700,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Colors.transparent),
+        ),
         side: BorderSide.none,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFFF2F4F6),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: _tossBlue, width: 1.5)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: _tossBlue, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
         hintStyle: const TextStyle(color: Color(0xFFB0B8C1)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -145,7 +193,9 @@ class UrlInboxApp extends ConsumerWidget {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
@@ -155,7 +205,9 @@ class UrlInboxApp extends ConsumerWidget {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
@@ -163,7 +215,9 @@ class UrlInboxApp extends ConsumerWidget {
         style: TextButton.styleFrom(
           foregroundColor: _tossBlue,
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
@@ -171,12 +225,22 @@ class UrlInboxApp extends ConsumerWidget {
         indicatorColor: Colors.transparent,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         iconTheme: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return const IconThemeData(color: _tossBlue);
+          if (states.contains(WidgetState.selected))
+            return const IconThemeData(color: _tossBlue);
           return const IconThemeData(color: Color(0xFFB0B8C1));
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return const TextStyle(color: _tossBlue, fontSize: 12, fontWeight: FontWeight.bold);
-          return const TextStyle(color: Color(0xFFB0B8C1), fontSize: 12, fontWeight: FontWeight.w500);
+          if (states.contains(WidgetState.selected))
+            return const TextStyle(
+              color: _tossBlue,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            );
+          return const TextStyle(
+            color: Color(0xFFB0B8C1),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          );
         }),
         elevation: 0,
         height: 64,
@@ -184,14 +248,24 @@ class UrlInboxApp extends ConsumerWidget {
       dialogTheme: DialogThemeData(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF191F28)),
+        titleTextStyle: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Color(0xFF191F28),
+        ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
         backgroundColor: Colors.white,
         modalBackgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
       ),
-      dividerTheme: const DividerThemeData(color: Color(0xFFF2F4F6), thickness: 1, space: 1),
+      dividerTheme: const DividerThemeData(
+        color: Color(0xFFF2F4F6),
+        thickness: 1,
+        space: 1,
+      ),
     );
 
     final darkTheme = ThemeData(
@@ -210,7 +284,12 @@ class UrlInboxApp extends ConsumerWidget {
         backgroundColor: _tossDarkBg,
         scrolledUnderElevation: 0,
         centerTitle: false,
-        titleTextStyle: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800, letterSpacing: -0.5),
+        titleTextStyle: TextStyle(
+          color: Colors.white,
+          fontSize: 24,
+          fontWeight: FontWeight.w800,
+          letterSpacing: -0.5,
+        ),
         iconTheme: IconThemeData(color: Colors.white),
         elevation: 0,
       ),
@@ -223,19 +302,40 @@ class UrlInboxApp extends ConsumerWidget {
       chipTheme: ChipThemeData(
         backgroundColor: _tossDarkSurface,
         selectedColor: _tossBlue.withValues(alpha: 0.2),
-        labelStyle: const TextStyle(color: Color(0xFFD1D5DB), fontWeight: FontWeight.w600),
-        secondaryLabelStyle: const TextStyle(color: _tossBlue, fontWeight: FontWeight.w700),
+        labelStyle: const TextStyle(
+          color: Color(0xFFD1D5DB),
+          fontWeight: FontWeight.w600,
+        ),
+        secondaryLabelStyle: const TextStyle(
+          color: _tossBlue,
+          fontWeight: FontWeight.w700,
+        ),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Colors.transparent),
+        ),
         side: BorderSide.none,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: const Color(0xFF2C2C35),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: const BorderSide(color: _tossBlue, width: 1.5)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(16),
+          borderSide: const BorderSide(color: _tossBlue, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 16,
+        ),
         hintStyle: const TextStyle(color: Color(0xFF6B7684)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -244,7 +344,9 @@ class UrlInboxApp extends ConsumerWidget {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
@@ -254,7 +356,9 @@ class UrlInboxApp extends ConsumerWidget {
           foregroundColor: Colors.white,
           elevation: 0,
           padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
         ),
       ),
@@ -262,7 +366,9 @@ class UrlInboxApp extends ConsumerWidget {
         style: TextButton.styleFrom(
           foregroundColor: _tossBlue,
           textStyle: const TextStyle(fontWeight: FontWeight.w600),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
         ),
       ),
       navigationBarTheme: NavigationBarThemeData(
@@ -270,12 +376,22 @@ class UrlInboxApp extends ConsumerWidget {
         indicatorColor: Colors.transparent,
         labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
         iconTheme: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return const IconThemeData(color: _tossBlue);
+          if (states.contains(WidgetState.selected))
+            return const IconThemeData(color: _tossBlue);
           return const IconThemeData(color: Color(0xFF6B7684));
         }),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return const TextStyle(color: _tossBlue, fontSize: 12, fontWeight: FontWeight.bold);
-          return const TextStyle(color: Color(0xFF6B7684), fontSize: 12, fontWeight: FontWeight.w500);
+          if (states.contains(WidgetState.selected))
+            return const TextStyle(
+              color: _tossBlue,
+              fontSize: 12,
+              fontWeight: FontWeight.bold,
+            );
+          return const TextStyle(
+            color: Color(0xFF6B7684),
+            fontSize: 12,
+            fontWeight: FontWeight.w500,
+          );
         }),
         elevation: 0,
         height: 64,
@@ -283,14 +399,24 @@ class UrlInboxApp extends ConsumerWidget {
       dialogTheme: DialogThemeData(
         backgroundColor: _tossDarkSurface,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        titleTextStyle: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+        titleTextStyle: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: _tossDarkSurface,
         modalBackgroundColor: _tossDarkSurface,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
       ),
-      dividerTheme: const DividerThemeData(color: Color(0xFF2C2C35), thickness: 1, space: 1),
+      dividerTheme: const DividerThemeData(
+        color: Color(0xFF2C2C35),
+        thickness: 1,
+        space: 1,
+      ),
     );
 
     return MaterialApp.router(
@@ -353,7 +479,23 @@ class LinkItem {
   final DateTime? lastOpenedAt;
   final List<String> mediaUrls;
 
-  LinkItem copyWith({bool? isRead, bool? isStarred, bool? isArchived, String? note, String? folderId, List<String>? tags, DateTime? updatedAt, DateTime? createdAt, DateTime? sharedAt, DateTime? lastOpenedAt, String? title, String? description, String? imageUrl, String? faviconUrl, List<String>? mediaUrls}) {
+  LinkItem copyWith({
+    bool? isRead,
+    bool? isStarred,
+    bool? isArchived,
+    String? note,
+    String? folderId,
+    List<String>? tags,
+    DateTime? updatedAt,
+    DateTime? createdAt,
+    DateTime? sharedAt,
+    DateTime? lastOpenedAt,
+    String? title,
+    String? description,
+    String? imageUrl,
+    String? faviconUrl,
+    List<String>? mediaUrls,
+  }) {
     return LinkItem(
       id: id,
       url: url,
@@ -379,50 +521,57 @@ class LinkItem {
   }
 
   Map<String, Object?> toMap() => {
-        'id': id,
-        'url': url,
-        'normalized_url': normalizedUrl,
-        'title': title,
-        'description': description,
-        'image_url': imageUrl,
-        'domain': domain,
-        'favicon_url': faviconUrl,
-        'created_at': createdAt.toIso8601String(),
-        'updated_at': updatedAt.toIso8601String(),
-        'shared_at': sharedAt.toIso8601String(),
-        'is_read': isRead ? 1 : 0,
-        'is_starred': isStarred ? 1 : 0,
-        'is_archived': isArchived ? 1 : 0,
-        'tags': tags.join(','),
-        'folder_id': folderId,
-        'note': note,
-        'source_app': sourceApp,
-        'last_opened_at': lastOpenedAt?.toIso8601String(),
-        'media_urls': jsonEncode(mediaUrls),
-      };
+    'id': id,
+    'url': url,
+    'normalized_url': normalizedUrl,
+    'title': title,
+    'description': description,
+    'image_url': imageUrl,
+    'domain': domain,
+    'favicon_url': faviconUrl,
+    'created_at': createdAt.toIso8601String(),
+    'updated_at': updatedAt.toIso8601String(),
+    'shared_at': sharedAt.toIso8601String(),
+    'is_read': isRead ? 1 : 0,
+    'is_starred': isStarred ? 1 : 0,
+    'is_archived': isArchived ? 1 : 0,
+    'tags': tags.join(','),
+    'folder_id': folderId,
+    'note': note,
+    'source_app': sourceApp,
+    'last_opened_at': lastOpenedAt?.toIso8601String(),
+    'media_urls': jsonEncode(mediaUrls),
+  };
 
   factory LinkItem.fromMap(Map<String, Object?> m) => LinkItem(
-        id: m['id'] as String,
-        url: m['url'] as String,
-        normalizedUrl: m['normalized_url'] as String,
-        title: (m['title'] as String?) ?? '',
-        description: (m['description'] as String?) ?? '',
-        imageUrl: (m['image_url'] as String?) ?? '',
-        domain: (m['domain'] as String?) ?? '',
-        faviconUrl: (m['favicon_url'] as String?) ?? '',
-        createdAt: DateTime.parse(m['created_at'] as String),
-        updatedAt: DateTime.parse(m['updated_at'] as String),
-        sharedAt: DateTime.parse((m['shared_at'] as String?) ?? (m['created_at'] as String)),
-        isRead: (m['is_read'] as int? ?? 0) == 1,
-        isStarred: (m['is_starred'] as int? ?? 0) == 1,
-        isArchived: (m['is_archived'] as int? ?? 0) == 1,
-        tags: ((m['tags'] as String?) ?? '').split(',').where((e) => e.isNotEmpty).toList(),
-        folderId: m['folder_id'] as String?,
-        note: (m['note'] as String?) ?? '',
-        sourceApp: m['source_app'] as String?,
-        lastOpenedAt: (m['last_opened_at'] as String?) == null ? null : DateTime.parse(m['last_opened_at'] as String),
-        mediaUrls: _parseMediaUrls(m['media_urls']),
-      );
+    id: m['id'] as String,
+    url: m['url'] as String,
+    normalizedUrl: m['normalized_url'] as String,
+    title: (m['title'] as String?) ?? '',
+    description: (m['description'] as String?) ?? '',
+    imageUrl: (m['image_url'] as String?) ?? '',
+    domain: (m['domain'] as String?) ?? '',
+    faviconUrl: (m['favicon_url'] as String?) ?? '',
+    createdAt: DateTime.parse(m['created_at'] as String),
+    updatedAt: DateTime.parse(m['updated_at'] as String),
+    sharedAt: DateTime.parse(
+      (m['shared_at'] as String?) ?? (m['created_at'] as String),
+    ),
+    isRead: (m['is_read'] as int? ?? 0) == 1,
+    isStarred: (m['is_starred'] as int? ?? 0) == 1,
+    isArchived: (m['is_archived'] as int? ?? 0) == 1,
+    tags: ((m['tags'] as String?) ?? '')
+        .split(',')
+        .where((e) => e.isNotEmpty)
+        .toList(),
+    folderId: m['folder_id'] as String?,
+    note: (m['note'] as String?) ?? '',
+    sourceApp: m['source_app'] as String?,
+    lastOpenedAt: (m['last_opened_at'] as String?) == null
+        ? null
+        : DateTime.parse(m['last_opened_at'] as String),
+    mediaUrls: _parseMediaUrls(m['media_urls']),
+  );
 
   static List<String> _parseMediaUrls(Object? raw) {
     if (raw == null) return const [];
@@ -432,10 +581,17 @@ class LinkItem {
       try {
         final decoded = jsonDecode(value);
         if (decoded is List) {
-          return decoded.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+          return decoded
+              .map((e) => '$e'.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
         }
       } catch (_) {
-        return value.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        return value
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
       }
     }
     if (raw is List) {
@@ -445,8 +601,22 @@ class LinkItem {
   }
 }
 
-class TagItem { const TagItem({required this.id, required this.name}); final String id; final String name; }
-class FolderItem { const FolderItem({required this.id, required this.name, required this.sortOrder}); final String id; final String name; final int sortOrder; }
+class TagItem {
+  const TagItem({required this.id, required this.name});
+  final String id;
+  final String name;
+}
+
+class FolderItem {
+  const FolderItem({
+    required this.id,
+    required this.name,
+    required this.sortOrder,
+  });
+  final String id;
+  final String name;
+  final int sortOrder;
+}
 
 class AppState {
   const AppState({
@@ -517,30 +687,29 @@ class AppState {
     String? candidate,
     Set<String>? dismissedUrls,
     String? pendingTitleEditId,
-  }) =>
-      AppState(
-        loading: loading ?? this.loading,
-        links: links ?? this.links,
-        tags: tags ?? this.tags,
-        folders: folders ?? this.folders,
-        tab: tab ?? this.tab,
-        filter: filter ?? this.filter,
-        query: query ?? this.query,
-        searchDomain: searchDomain ?? this.searchDomain,
-        searchTag: searchTag ?? this.searchTag,
-        period: period ?? this.period,
-        clipboardEnabled: clipboardEnabled ?? this.clipboardEnabled,
-        reminderEnabled: reminderEnabled ?? this.reminderEnabled,
-        themeMode: themeMode ?? this.themeMode,
-        cloudConfigured: cloudConfigured ?? this.cloudConfigured,
-        signedIn: signedIn ?? this.signedIn,
-        authGatePassed: authGatePassed ?? this.authGatePassed,
-        syncing: syncing ?? this.syncing,
-        userEmail: userEmail ?? this.userEmail,
-        candidate: candidate,
-        dismissedUrls: dismissedUrls ?? this.dismissedUrls,
-        pendingTitleEditId: pendingTitleEditId,
-      );
+  }) => AppState(
+    loading: loading ?? this.loading,
+    links: links ?? this.links,
+    tags: tags ?? this.tags,
+    folders: folders ?? this.folders,
+    tab: tab ?? this.tab,
+    filter: filter ?? this.filter,
+    query: query ?? this.query,
+    searchDomain: searchDomain ?? this.searchDomain,
+    searchTag: searchTag ?? this.searchTag,
+    period: period ?? this.period,
+    clipboardEnabled: clipboardEnabled ?? this.clipboardEnabled,
+    reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+    themeMode: themeMode ?? this.themeMode,
+    cloudConfigured: cloudConfigured ?? this.cloudConfigured,
+    signedIn: signedIn ?? this.signedIn,
+    authGatePassed: authGatePassed ?? this.authGatePassed,
+    syncing: syncing ?? this.syncing,
+    userEmail: userEmail ?? this.userEmail,
+    candidate: candidate,
+    dismissedUrls: dismissedUrls ?? this.dismissedUrls,
+    pendingTitleEditId: pendingTitleEditId,
+  );
 
   static const initial = AppState(
     loading: true,
@@ -567,7 +736,8 @@ class AppState {
 }
 
 class AppController extends StateNotifier<AppState> {
-  AppController(this.repo, this.reminder, this.cloud) : super(AppState.initial) {
+  AppController(this.repo, this.reminder, this.cloud)
+    : super(AppState.initial) {
     _init();
   }
 
@@ -582,7 +752,8 @@ class AppController extends StateNotifier<AppState> {
   bool _shareIngestRequested = false;
   Future<void> _sharedPersistQueue = Future<void>.value();
 
-  String? get _userId => _cloudConfigured ? Supabase.instance.client.auth.currentUser?.id : null;
+  String? get _userId =>
+      _cloudConfigured ? Supabase.instance.client.auth.currentUser?.id : null;
 
   Future<bool> _ensureLocalScopeForAuthUser(String? userId) async {
     final activeUserId = (await repo.getString('active_cloud_user_id')) ?? '';
@@ -611,7 +782,9 @@ class AppController extends StateNotifier<AppState> {
   void _bindAuthState() {
     if (!_cloudConfigured) return;
     _authSub?.cancel();
-    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((event) async {
+    _authSub = Supabase.instance.client.auth.onAuthStateChange.listen((
+      event,
+    ) async {
       final user = event.session?.user;
       if (user != null) {
         final cleared = await _ensureLocalScopeForAuthUser(user.id);
@@ -772,7 +945,11 @@ class AppController extends StateNotifier<AppState> {
         } catch (e) {
           debugPrint('sync pull merge failed: $e');
           // 로컬 DB 병합 실패 시에도 서버 데이터를 즉시 표시
-          state = state.copyWith(folders: remoteFolders, tags: remoteTags, links: remoteLinks);
+          state = state.copyWith(
+            folders: remoteFolders,
+            tags: remoteTags,
+            links: remoteLinks,
+          );
         }
       } catch (e) {
         debugPrint('sync pull failed: $e');
@@ -803,7 +980,11 @@ class AppController extends StateNotifier<AppState> {
           await refresh();
         } catch (e) {
           debugPrint('sync final pull merge failed: $e');
-          state = state.copyWith(folders: remoteFolders, tags: remoteTags, links: remoteLinks);
+          state = state.copyWith(
+            folders: remoteFolders,
+            tags: remoteTags,
+            links: remoteLinks,
+          );
         }
       } catch (e) {
         debugPrint('sync final pull failed: $e');
@@ -832,7 +1013,8 @@ class AppController extends StateNotifier<AppState> {
     for (final remoteItem in remote) {
       if (_isAuthCallbackUrl(remoteItem.url)) continue;
       final localItem = byNormalized[remoteItem.normalizedUrl];
-      if (localItem != null && !remoteItem.updatedAt.isAfter(localItem.updatedAt)) {
+      if (localItem != null &&
+          !remoteItem.updatedAt.isAfter(localItem.updatedAt)) {
         continue;
       }
 
@@ -868,11 +1050,21 @@ class AppController extends StateNotifier<AppState> {
       id: local?.id ?? remote.id,
       url: remote.url,
       normalizedUrl: remote.normalizedUrl,
-      title: remoteTitle.isNotEmpty ? remote.title : (local?.title ?? remote.url),
-      description: remoteDescription.isNotEmpty ? remote.description : (local?.description ?? ''),
-      imageUrl: remoteImage.isNotEmpty ? remote.imageUrl : (local?.imageUrl ?? ''),
-      domain: remoteDomain.isNotEmpty ? remote.domain : (local?.domain ?? (Uri.tryParse(remote.url)?.host ?? '')),
-      faviconUrl: remoteFavicon.isNotEmpty ? remote.faviconUrl : (local?.faviconUrl ?? ''),
+      title: remoteTitle.isNotEmpty
+          ? remote.title
+          : (local?.title ?? remote.url),
+      description: remoteDescription.isNotEmpty
+          ? remote.description
+          : (local?.description ?? ''),
+      imageUrl: remoteImage.isNotEmpty
+          ? remote.imageUrl
+          : (local?.imageUrl ?? ''),
+      domain: remoteDomain.isNotEmpty
+          ? remote.domain
+          : (local?.domain ?? (Uri.tryParse(remote.url)?.host ?? '')),
+      faviconUrl: remoteFavicon.isNotEmpty
+          ? remote.faviconUrl
+          : (local?.faviconUrl ?? ''),
       createdAt: local?.createdAt ?? remote.createdAt,
       updatedAt: remote.updatedAt,
       sharedAt: remote.sharedAt,
@@ -884,7 +1076,9 @@ class AppController extends StateNotifier<AppState> {
       note: remoteNote.isNotEmpty ? remote.note : (local?.note ?? ''),
       sourceApp: remote.sourceApp ?? local?.sourceApp,
       lastOpenedAt: remote.lastOpenedAt ?? local?.lastOpenedAt,
-      mediaUrls: remote.mediaUrls.isNotEmpty ? remote.mediaUrls : (local?.mediaUrls ?? const []),
+      mediaUrls: remote.mediaUrls.isNotEmpty
+          ? remote.mediaUrls
+          : (local?.mediaUrls ?? const []),
     );
   }
 
@@ -895,11 +1089,17 @@ class AppController extends StateNotifier<AppState> {
     final favicon = item.faviconUrl.trim();
     final isThreads = _isThreadsDomainForUi(item.domain);
 
-    final missingTitle = title.isEmpty || title == item.url || isGenericTitle(title);
+    final missingTitle =
+        title.isEmpty || title == item.url || isGenericTitle(title);
     final missingDescription = description.isEmpty;
-    final missingVisual = image.isEmpty && favicon.isEmpty && item.mediaUrls.isEmpty;
-    final missingThreadsProfile = isThreads && _threadsProfileFromStored(item) == null;
-    return missingTitle || missingDescription || missingVisual || missingThreadsProfile;
+    final missingVisual =
+        image.isEmpty && favicon.isEmpty && item.mediaUrls.isEmpty;
+    final missingThreadsProfile =
+        isThreads && _threadsProfileFromStored(item) == null;
+    return missingTitle ||
+        missingDescription ||
+        missingVisual ||
+        missingThreadsProfile;
   }
 
   Future<LinkItem?> _backfillLinkMetadata(LinkItem item) async {
@@ -913,10 +1113,15 @@ class AppController extends StateNotifier<AppState> {
 
       final isThreads = _isThreadsDomainForUi(item.domain);
       final threadsQuickAvatar = isThreads
-          ? (_threadsAvatarFallbackFromUrl(item.url) ?? _threadsAvatarFallbackFromText(item.title) ?? _threadsAvatarFallbackFromText(item.description) ?? _threadsAvatarFallbackFromText(meta.title))
+          ? (_threadsAvatarFallbackFromUrl(item.url) ??
+                _threadsAvatarFallbackFromText(item.title) ??
+                _threadsAvatarFallbackFromText(item.description) ??
+                _threadsAvatarFallbackFromText(meta.title))
           : null;
-      final needsThreadsProfile = isThreads && _threadsProfileFromStored(item) == null;
-      final nextTitle = (title.isEmpty || title == item.url || isGenericTitle(title))
+      final needsThreadsProfile =
+          isThreads && _threadsProfileFromStored(item) == null;
+      final nextTitle =
+          (title.isEmpty || title == item.url || isGenericTitle(title))
           ? _pickTitleForSave(
               incomingTitle: null,
               metaTitle: meta.title,
@@ -925,8 +1130,12 @@ class AppController extends StateNotifier<AppState> {
               isThreads: isThreads,
             )
           : item.title;
-      final nextDescription = description.isEmpty ? (meta.description ?? item.description) : item.description;
-      final nextImage = image.isEmpty ? (meta.image ?? meta.mediaUrls.firstOrNull ?? item.imageUrl) : item.imageUrl;
+      final nextDescription = description.isEmpty
+          ? (meta.description ?? item.description)
+          : item.description;
+      final nextImage = image.isEmpty
+          ? (meta.image ?? meta.mediaUrls.firstOrNull ?? item.imageUrl)
+          : item.imageUrl;
       final sanitizedThreadsProfile = isThreads
           ? _sanitizeThreadsProfileImage(
               meta.profileImage,
@@ -934,9 +1143,15 @@ class AppController extends StateNotifier<AppState> {
               bodyMediaUrls: meta.mediaUrls,
             )
           : null;
-      final fallbackFavicon = isThreads ? (sanitizedThreadsProfile ?? threadsQuickAvatar) : (meta.profileImage ?? meta.favicon);
-      final nextFavicon = (favicon.isEmpty || needsThreadsProfile) ? (fallbackFavicon ?? item.faviconUrl) : item.faviconUrl;
-      final nextMediaUrls = item.mediaUrls.isEmpty ? meta.mediaUrls : item.mediaUrls;
+      final fallbackFavicon = isThreads
+          ? (sanitizedThreadsProfile ?? threadsQuickAvatar)
+          : (meta.profileImage ?? meta.favicon);
+      final nextFavicon = (favicon.isEmpty || needsThreadsProfile)
+          ? (fallbackFavicon ?? item.faviconUrl)
+          : item.faviconUrl;
+      final nextMediaUrls = item.mediaUrls.isEmpty
+          ? meta.mediaUrls
+          : item.mediaUrls;
 
       final changed =
           nextTitle != item.title ||
@@ -988,7 +1203,9 @@ class AppController extends StateNotifier<AppState> {
     unawaited(() async {
       final startedAt = DateTime.now();
       try {
-        while (mounted && DateTime.now().difference(startedAt) < const Duration(seconds: 15)) {
+        while (mounted &&
+            DateTime.now().difference(startedAt) <
+                const Duration(seconds: 15)) {
           _requestSharedIngest();
           final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
           final waitMs = elapsedMs < 3000 ? 120 : 300;
@@ -1027,7 +1244,9 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> _init() async {
-    final user = _cloudConfigured ? Supabase.instance.client.auth.currentUser : null;
+    final user = _cloudConfigured
+        ? Supabase.instance.client.auth.currentUser
+        : null;
     try {
       await repo.init();
       if (!kIsWeb) {
@@ -1079,8 +1298,14 @@ class AppController extends StateNotifier<AppState> {
     if (badLinks.isNotEmpty) {
       await _cleanupAuthCallbackLinks(badLinks);
     }
-    final links = (badLinks.isEmpty ? allLinks : await repo.links()).where((e) => !_isAuthCallbackUrl(e.url)).toList();
-    state = state.copyWith(links: links, tags: await repo.tags(), folders: await repo.folders());
+    final links = (badLinks.isEmpty ? allLinks : await repo.links())
+        .where((e) => !_isAuthCallbackUrl(e.url))
+        .toList();
+    state = state.copyWith(
+      links: links,
+      tags: await repo.tags(),
+      folders: await repo.folders(),
+    );
     await _syncReminder();
   }
 
@@ -1097,44 +1322,55 @@ class AppController extends StateNotifier<AppState> {
   }
 
   List<LinkItem> get inbox {
-    final base = state.links.where((e) => !e.isArchived).toList()..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+    final base = state.links.where((e) => !e.isArchived).toList()
+      ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
     return switch (state.filter) {
       InboxFilter.unread => base.where((e) => !e.isRead).toList(),
       InboxFilter.starred => base.where((e) => e.isStarred).toList(),
-      InboxFilter.today => base.where((e) => DateTime.now().difference(e.createdAt).inDays == 0).toList(),
+      InboxFilter.today =>
+        base
+            .where((e) => DateTime.now().difference(e.createdAt).inDays == 0)
+            .toList(),
       InboxFilter.all => base,
     };
   }
 
   List<LinkItem> get searched => state.links.where((e) {
-        final q = state.query.trim().toLowerCase();
-        if (q.isEmpty) return false;
-        final queryOk =
-            e.title.toLowerCase().contains(q) ||
-            e.domain.toLowerCase().contains(q) ||
-            e.note.toLowerCase().contains(q) ||
-            e.tags.any((t) => t.toLowerCase().contains(q));
-        final domainOk = state.searchDomain == null || e.domain == state.searchDomain;
-        final tagOk = state.searchTag == null || e.tags.contains(state.searchTag);
-        final periodOk = switch (state.period) {
-          SearchPeriod.day => DateTime.now().difference(e.createdAt).inDays < 1,
-          SearchPeriod.week => DateTime.now().difference(e.createdAt).inDays < 7,
-          SearchPeriod.month => DateTime.now().difference(e.createdAt).inDays < 30,
-          SearchPeriod.all => true,
-        };
-        return queryOk && domainOk && tagOk && periodOk;
-      }).toList()
-        ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+    final q = state.query.trim().toLowerCase();
+    if (q.isEmpty) return false;
+    final queryOk =
+        e.title.toLowerCase().contains(q) ||
+        e.domain.toLowerCase().contains(q) ||
+        e.note.toLowerCase().contains(q) ||
+        e.tags.any((t) => t.toLowerCase().contains(q));
+    final domainOk =
+        state.searchDomain == null || e.domain == state.searchDomain;
+    final tagOk = state.searchTag == null || e.tags.contains(state.searchTag);
+    final periodOk = switch (state.period) {
+      SearchPeriod.day => DateTime.now().difference(e.createdAt).inDays < 1,
+      SearchPeriod.week => DateTime.now().difference(e.createdAt).inDays < 7,
+      SearchPeriod.month => DateTime.now().difference(e.createdAt).inDays < 30,
+      SearchPeriod.all => true,
+    };
+    return queryOk && domainOk && tagOk && periodOk;
+  }).toList()..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
 
-  Future<LinkItem?> addLink(String raw, {String? title, String? note, String? source}) async {
+  Future<LinkItem?> addLink(
+    String raw, {
+    String? title,
+    String? note,
+    String? source,
+  }) async {
     try {
       final input = _sanitizeIncomingUrl(raw);
       if (input.isEmpty || _isAuthCallbackUrl(input)) return null;
       final url = _withScheme(input);
       if (!_isUrl(url) || _isAuthCallbackUrl(url)) return null;
       final normalized = _normalize(url);
-      final existing = state.links.where((e) => e.normalizedUrl == normalized).firstOrNull;
-      
+      final existing = state.links
+          .where((e) => e.normalizedUrl == normalized)
+          .firstOrNull;
+
       Meta meta;
       if (source == 'shared') {
         final uri = Uri.tryParse(url);
@@ -1156,16 +1392,21 @@ class AppController extends StateNotifier<AppState> {
       final isThreads = _isThreadsDomainForUi(meta.domain);
       final threadsQuickAvatar = isThreads
           ? (_threadsAvatarFallbackFromUrl(url) ??
-              _threadsAvatarFallbackFromText(title) ??
-              _threadsAvatarFallbackFromText(meta.title) ??
-              _threadsAvatarFallbackFromText(meta.description))
+                _threadsAvatarFallbackFromText(title) ??
+                _threadsAvatarFallbackFromText(meta.title) ??
+                _threadsAvatarFallbackFromText(meta.description))
           : null;
       final threadsProfileImage = isThreads
-          ? (_sanitizeThreadsProfileImage(meta.profileImage, previewImage: previewImage, bodyMediaUrls: bodyMediaUrls) ?? threadsQuickAvatar)
+          ? (_sanitizeThreadsProfileImage(
+                  meta.profileImage,
+                  previewImage: previewImage,
+                  bodyMediaUrls: bodyMediaUrls,
+                ) ??
+                threadsQuickAvatar)
           : null;
 
       LinkItem savedItem;
-      
+
       if (existing != null) {
         savedItem = existing.copyWith(
           title: _pickTitleForSave(
@@ -1178,8 +1419,12 @@ class AppController extends StateNotifier<AppState> {
           description: meta.description ?? existing.description,
           imageUrl: previewImage ?? existing.imageUrl,
           faviconUrl: isThreads
-              ? (threadsProfileImage ?? (existing.faviconUrl.isEmpty ? '' : existing.faviconUrl))
-              : (meta.profileImage ?? (existing.faviconUrl.isEmpty ? meta.favicon : existing.faviconUrl)),
+              ? (threadsProfileImage ??
+                    (existing.faviconUrl.isEmpty ? '' : existing.faviconUrl))
+              : (meta.profileImage ??
+                    (existing.faviconUrl.isEmpty
+                        ? meta.favicon
+                        : existing.faviconUrl)),
           mediaUrls: bodyMediaUrls.isEmpty ? existing.mediaUrls : bodyMediaUrls,
           note: (note == null || note.isEmpty) ? existing.note : note,
           tags: {...existing.tags, autoTag}.toList(),
@@ -1208,7 +1453,9 @@ class AppController extends StateNotifier<AppState> {
           description: meta.description ?? '',
           imageUrl: previewImage ?? '',
           domain: meta.domain,
-          faviconUrl: isThreads ? (threadsProfileImage ?? '') : (meta.profileImage ?? meta.favicon),
+          faviconUrl: isThreads
+              ? (threadsProfileImage ?? '')
+              : (meta.profileImage ?? meta.favicon),
           createdAt: now,
           sharedAt: now, // 최초 저장 시 정렬용 시간 설정
           updatedAt: now,
@@ -1245,43 +1492,67 @@ class AppController extends StateNotifier<AppState> {
   }
 
   void _applySavedLinkOptimistically(LinkItem savedItem) {
-    final links = state.links.where((e) => e.id != savedItem.id && e.normalizedUrl != savedItem.normalizedUrl).toList()
-      ..add(savedItem)
-      ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+    final links =
+        state.links
+            .where(
+              (e) =>
+                  e.id != savedItem.id &&
+                  e.normalizedUrl != savedItem.normalizedUrl,
+            )
+            .toList()
+          ..add(savedItem)
+          ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
     state = state.copyWith(links: links);
   }
 
   void _persistSharedLink(LinkItem savedItem) {
-    _sharedPersistQueue = _sharedPersistQueue.then((_) async {
-      await repo.upsert(savedItem);
-      await repo.ensureTags(savedItem.tags);
+    _sharedPersistQueue = _sharedPersistQueue
+        .then((_) async {
+          await repo.upsert(savedItem);
+          await repo.ensureTags(savedItem.tags);
 
-      LinkItem latest = (await repo.links()).where((e) => e.id == savedItem.id).firstOrNull ?? savedItem;
-      for (var attempt = 0; attempt < 3; attempt++) {
-        final backfilled = await _backfillLinkMetadata(latest);
-        if (backfilled != null) {
-          await repo.upsert(backfilled);
-          if (backfilled.tags.isNotEmpty) {
-            await repo.ensureTags(backfilled.tags);
+          LinkItem latest =
+              (await repo.links())
+                  .where((e) => e.id == savedItem.id)
+                  .firstOrNull ??
+              savedItem;
+          for (var attempt = 0; attempt < 3; attempt++) {
+            final backfilled = await _backfillLinkMetadata(latest);
+            if (backfilled != null) {
+              await repo.upsert(backfilled);
+              if (backfilled.tags.isNotEmpty) {
+                await repo.ensureTags(backfilled.tags);
+              }
+              _applySavedLinkOptimistically(backfilled);
+              break;
+            }
+
+            await Future<void>.delayed(
+              Duration(milliseconds: 500 * (attempt + 1)),
+            );
+            latest =
+                (await repo.links())
+                    .where((e) => e.id == savedItem.id)
+                    .firstOrNull ??
+                latest;
           }
-          _applySavedLinkOptimistically(backfilled);
-          break;
-        }
 
-        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
-        latest = (await repo.links()).where((e) => e.id == savedItem.id).firstOrNull ?? latest;
-      }
-
-      _triggerBackgroundSync();
-    }).catchError((e) {
-      debugPrint('persist shared link failed: $e');
-    });
+          _triggerBackgroundSync();
+        })
+        .catchError((e) {
+          debugPrint('persist shared link failed: $e');
+        });
   }
 
-  String? _sanitizeThreadsProfileImage(String? rawProfileImage, {String? previewImage, List<String> bodyMediaUrls = const []}) {
+  String? _sanitizeThreadsProfileImage(
+    String? rawProfileImage, {
+    String? previewImage,
+    List<String> bodyMediaUrls = const [],
+  }) {
     final candidate = rawProfileImage?.trim();
     if (candidate == null || candidate.isEmpty) return null;
-    if (!candidate.startsWith('http://') && !candidate.startsWith('https://')) return null;
+    if (!candidate.startsWith('http://') && !candidate.startsWith('https://'))
+      return null;
 
     final lower = candidate.toLowerCase();
     if (_isThreadsBrandLogoUrl(lower)) return null;
@@ -1315,7 +1586,10 @@ class AppController extends StateNotifier<AppState> {
     if (meta != null) return meta;
 
     if (isThreads) {
-      final threadsFallback = _threadsTitleFallbackFromUrl(url) ?? _threadsTitleFallbackFromText(incomingTitle) ?? _threadsTitleFallbackFromText(metaTitle);
+      final threadsFallback =
+          _threadsTitleFallbackFromUrl(url) ??
+          _threadsTitleFallbackFromText(incomingTitle) ??
+          _threadsTitleFallbackFromText(metaTitle);
       if (threadsFallback != null) return threadsFallback;
     }
 
@@ -1342,15 +1616,26 @@ class AppController extends StateNotifier<AppState> {
 
   bool isGenericTitle(String title) {
     final generic = [
-      '네이버 카페', 'naver cafe', '네이버카페',
-      '네이버 블로그', 'naver blog',
-      '카카오톡', 'kakaotalk',
-      '인스타그램', 'instagram',
-      '페이스북', 'facebook',
-      '트위터', 'twitter', 'x',
+      '네이버 카페',
+      'naver cafe',
+      '네이버카페',
+      '네이버 블로그',
+      'naver blog',
+      '카카오톡',
+      'kakaotalk',
+      '인스타그램',
+      'instagram',
+      '페이스북',
+      'facebook',
+      '트위터',
+      'twitter',
+      'x',
     ];
     final lower = title.toLowerCase().trim();
-    if (generic.any((g) => lower == g || lower.startsWith('$g ') || lower.endsWith(' $g'))) return true;
+    if (generic.any(
+      (g) => lower == g || lower.startsWith('$g ') || lower.endsWith(' $g'),
+    ))
+      return true;
     if (lower.startsWith('[threads]')) return true;
     if (lower.contains('threads의') && lower.contains('님')) return true;
     if (lower.contains('threads post')) return true;
@@ -1372,8 +1657,15 @@ class AppController extends StateNotifier<AppState> {
     for (final item in actionable) {
       final url = (item['url'] as String).trim();
       final title = (item['title'] as String?)?.trim();
-      final saved = await addLink(url, title: (title != null && title.isNotEmpty) ? title : null, source: 'shared');
-      if (saved != null && (isGenericTitle(saved.title) || saved.title == saved.url || saved.title == saved.domain)) {
+      final saved = await addLink(
+        url,
+        title: (title != null && title.isNotEmpty) ? title : null,
+        source: 'shared',
+      );
+      if (saved != null &&
+          (isGenericTitle(saved.title) ||
+              saved.title == saved.url ||
+              saved.title == saved.domain)) {
         needsEdit.add(saved);
       }
     }
@@ -1385,7 +1677,8 @@ class AppController extends StateNotifier<AppState> {
     final txt = (await Clipboard.getData(Clipboard.kTextPlain))?.text?.trim();
     if (txt != null && _isUrl(txt)) {
       final normalized = _normalize(txt);
-      if (!state.links.any((e) => e.normalizedUrl == normalized) && !state.dismissedUrls.contains(normalized)) {
+      if (!state.links.any((e) => e.normalizedUrl == normalized) &&
+          !state.dismissedUrls.contains(normalized)) {
         state = state.copyWith(candidate: txt);
       }
     }
@@ -1400,15 +1693,23 @@ class AppController extends StateNotifier<AppState> {
   void dismissCandidate() {
     final v = state.candidate;
     if (v != null) {
-      state = state.copyWith(candidate: null, dismissedUrls: {...state.dismissedUrls, _normalize(v)});
+      state = state.copyWith(
+        candidate: null,
+        dismissedUrls: {...state.dismissedUrls, _normalize(v)},
+      );
     }
   }
+
   Future<void> setTab(int v) async => state = state.copyWith(tab: v);
-  Future<void> setFilter(InboxFilter v) async => state = state.copyWith(filter: v);
+  Future<void> setFilter(InboxFilter v) async =>
+      state = state.copyWith(filter: v);
   Future<void> setQuery(String v) async => state = state.copyWith(query: v);
-  Future<void> setSearchDomain(String? v) async => state = state.copyWith(searchDomain: v);
-  Future<void> setSearchTag(String? v) async => state = state.copyWith(searchTag: v);
-  Future<void> setPeriod(SearchPeriod v) async => state = state.copyWith(period: v);
+  Future<void> setSearchDomain(String? v) async =>
+      state = state.copyWith(searchDomain: v);
+  Future<void> setSearchTag(String? v) async =>
+      state = state.copyWith(searchTag: v);
+  Future<void> setPeriod(SearchPeriod v) async =>
+      state = state.copyWith(period: v);
 
   Future<void> toggleRead(LinkItem i) async {
     await repo.upsert(i.copyWith(isRead: !i.isRead, updatedAt: DateTime.now()));
@@ -1417,7 +1718,9 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> toggleStar(LinkItem i) async {
-    await repo.upsert(i.copyWith(isStarred: !i.isStarred, updatedAt: DateTime.now()));
+    await repo.upsert(
+      i.copyWith(isStarred: !i.isStarred, updatedAt: DateTime.now()),
+    );
     await refresh();
     _triggerBackgroundSync();
   }
@@ -1438,8 +1741,22 @@ class AppController extends StateNotifier<AppState> {
     _triggerBackgroundSync();
   }
 
-  Future<void> updateDetail(LinkItem i, {String? title, String? note, String? folderId, List<String>? tags}) async {
-    await repo.upsert(i.copyWith(title: title, note: note, folderId: folderId, tags: tags, updatedAt: DateTime.now()));
+  Future<void> updateDetail(
+    LinkItem i, {
+    String? title,
+    String? note,
+    String? folderId,
+    List<String>? tags,
+  }) async {
+    await repo.upsert(
+      i.copyWith(
+        title: title,
+        note: note,
+        folderId: folderId,
+        tags: tags,
+        updatedAt: DateTime.now(),
+      ),
+    );
     if (tags != null) await repo.ensureTags(tags);
     await refresh();
     _triggerBackgroundSync();
@@ -1449,7 +1766,13 @@ class AppController extends StateNotifier<AppState> {
     final uri = Uri.tryParse(i.url);
     if (uri == null) return;
     await launchUrl(uri, mode: LaunchMode.externalApplication);
-    await repo.upsert(i.copyWith(isRead: true, lastOpenedAt: DateTime.now(), updatedAt: DateTime.now()));
+    await repo.upsert(
+      i.copyWith(
+        isRead: true,
+        lastOpenedAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+      ),
+    );
     await refresh();
     _triggerBackgroundSync();
   }
@@ -1465,7 +1788,9 @@ class AppController extends StateNotifier<AppState> {
   Future<void> createFolder(String name) async {
     final v = name.trim();
     if (v.isEmpty) return;
-    await repo.insertFolder(FolderItem(id: _uuid.v4(), name: v, sortOrder: state.folders.length + 1));
+    await repo.insertFolder(
+      FolderItem(id: _uuid.v4(), name: v, sortOrder: state.folders.length + 1),
+    );
     await refresh();
     _triggerBackgroundSync();
   }
@@ -1519,9 +1844,10 @@ class AppController extends StateNotifier<AppState> {
     if (!state.reminderEnabled) {
       return reminder.cancel();
     }
-    await reminder.schedule(state.links.where((e) => !e.isRead && !e.isArchived).length);
+    await reminder.schedule(
+      state.links.where((e) => !e.isRead && !e.isArchived).length,
+    );
   }
-
 }
 
 class AppRepository {
@@ -1548,8 +1874,12 @@ class AppRepository {
     await db.execute(
       'CREATE TABLE IF NOT EXISTS links(id TEXT PRIMARY KEY,url TEXT,normalized_url TEXT UNIQUE,title TEXT,description TEXT,image_url TEXT,domain TEXT,favicon_url TEXT,created_at TEXT,updated_at TEXT,shared_at TEXT,is_read INTEGER,is_starred INTEGER,is_archived INTEGER,tags TEXT,folder_id TEXT,note TEXT,source_app TEXT,last_opened_at TEXT,media_urls TEXT)',
     );
-    await db.execute('CREATE TABLE IF NOT EXISTS tags(id TEXT PRIMARY KEY,name TEXT UNIQUE)');
-    await db.execute('CREATE TABLE IF NOT EXISTS folders(id TEXT PRIMARY KEY,name TEXT UNIQUE,sort_order INTEGER)');
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS tags(id TEXT PRIMARY KEY,name TEXT UNIQUE)',
+    );
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS folders(id TEXT PRIMARY KEY,name TEXT UNIQUE,sort_order INTEGER)',
+    );
   }
 
   Future<void> _migrate(Database db, int oldVersion, int newVersion) async {
@@ -1581,23 +1911,41 @@ class AppRepository {
     };
     for (final entry in linkAdditions.entries) {
       if (!linkCols.contains(entry.key)) {
-        await db.execute('ALTER TABLE links ADD COLUMN ${entry.key} ${entry.value}');
+        await db.execute(
+          'ALTER TABLE links ADD COLUMN ${entry.key} ${entry.value}',
+        );
       }
     }
 
     final now = DateTime.now().toIso8601String();
-    await db.rawUpdate("UPDATE links SET created_at = ? WHERE created_at IS NULL OR created_at = ''", [now]);
-    await db.rawUpdate("UPDATE links SET updated_at = COALESCE(NULLIF(updated_at, ''), created_at, ?) WHERE updated_at IS NULL OR updated_at = ''", [now]);
-    await db.rawUpdate("UPDATE links SET shared_at = COALESCE(NULLIF(shared_at, ''), created_at, ?) WHERE shared_at IS NULL OR shared_at = ''", [now]);
+    await db.rawUpdate(
+      "UPDATE links SET created_at = ? WHERE created_at IS NULL OR created_at = ''",
+      [now],
+    );
+    await db.rawUpdate(
+      "UPDATE links SET updated_at = COALESCE(NULLIF(updated_at, ''), created_at, ?) WHERE updated_at IS NULL OR updated_at = ''",
+      [now],
+    );
+    await db.rawUpdate(
+      "UPDATE links SET shared_at = COALESCE(NULLIF(shared_at, ''), created_at, ?) WHERE shared_at IS NULL OR shared_at = ''",
+      [now],
+    );
 
     final folderCols = await _tableColumns(db, 'folders');
     if (!folderCols.contains('sort_order')) {
-      await db.execute('ALTER TABLE folders ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0');
-      await db.rawUpdate('UPDATE folders SET sort_order = rowid WHERE sort_order IS NULL OR sort_order = 0');
+      await db.execute(
+        'ALTER TABLE folders ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0',
+      );
+      await db.rawUpdate(
+        'UPDATE folders SET sort_order = rowid WHERE sort_order IS NULL OR sort_order = 0',
+      );
     }
   }
 
-  Future<Set<String>> _tableColumns(DatabaseExecutor db, String tableName) async {
+  Future<Set<String>> _tableColumns(
+    DatabaseExecutor db,
+    String tableName,
+  ) async {
     final rows = await db.rawQuery('PRAGMA table_info($tableName)');
     return rows.map((r) => (r['name'] as String).toLowerCase()).toSet();
   }
@@ -1607,10 +1955,15 @@ class AppRepository {
     return _db!;
   }
 
-  Future<List<LinkItem>> links() async => (await (await db).query('links')).map(LinkItem.fromMap).toList();
+  Future<List<LinkItem>> links() async =>
+      (await (await db).query('links')).map(LinkItem.fromMap).toList();
 
   Future<void> upsert(LinkItem item) async {
-    await (await db).insert('links', item.toMap(), conflictAlgorithm: ConflictAlgorithm.replace);
+    await (await db).insert(
+      'links',
+      item.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
   }
 
   Future<void> delete(String id) async {
@@ -1618,7 +1971,9 @@ class AppRepository {
   }
 
   Future<List<TagItem>> tags() async {
-    return (await (await db).query('tags', orderBy: 'name ASC')).map((e) => TagItem(id: e['id'] as String, name: e['name'] as String)).toList();
+    return (await (await db).query('tags', orderBy: 'name ASC'))
+        .map((e) => TagItem(id: e['id'] as String, name: e['name'] as String))
+        .toList();
   }
 
   Future<void> ensureTags(List<String> names) async {
@@ -1626,46 +1981,89 @@ class AppRepository {
     for (final n in names) {
       final v = n.trim();
       if (v.isNotEmpty) {
-        await d.insert('tags', {'id': _uuid.v4(), 'name': v}, conflictAlgorithm: ConflictAlgorithm.ignore);
+        await d.insert('tags', {
+          'id': _uuid.v4(),
+          'name': v,
+        }, conflictAlgorithm: ConflictAlgorithm.ignore);
       }
     }
   }
 
   Future<void> insertTag(TagItem t) async {
-    await (await db).insert('tags', {'id': t.id, 'name': t.name}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await (await db).insert('tags', {
+      'id': t.id,
+      'name': t.name,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   Future<void> upsertTag(TagItem t) async {
     final d = await db;
-    final byName = await d.query('tags', where: 'name = ?', whereArgs: [t.name], limit: 1);
+    final byName = await d.query(
+      'tags',
+      where: 'name = ?',
+      whereArgs: [t.name],
+      limit: 1,
+    );
     if (byName.isNotEmpty) return;
-    await d.insert('tags', {'id': t.id, 'name': t.name}, conflictAlgorithm: ConflictAlgorithm.replace);
+    await d.insert('tags', {
+      'id': t.id,
+      'name': t.name,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
   }
 
   Future<List<FolderItem>> folders() async {
     return (await (await db).query('folders', orderBy: 'sort_order ASC'))
-        .map((e) => FolderItem(id: e['id'] as String, name: e['name'] as String, sortOrder: e['sort_order'] as int))
+        .map(
+          (e) => FolderItem(
+            id: e['id'] as String,
+            name: e['name'] as String,
+            sortOrder: e['sort_order'] as int,
+          ),
+        )
         .toList();
   }
 
   Future<void> insertFolder(FolderItem f) async {
-    await (await db).insert('folders', {'id': f.id, 'name': f.name, 'sort_order': f.sortOrder}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await (await db).insert('folders', {
+      'id': f.id,
+      'name': f.name,
+      'sort_order': f.sortOrder,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   Future<void> upsertFolder(FolderItem f) async {
     final d = await db;
-    final byId = await d.query('folders', where: 'id = ?', whereArgs: [f.id], limit: 1);
+    final byId = await d.query(
+      'folders',
+      where: 'id = ?',
+      whereArgs: [f.id],
+      limit: 1,
+    );
     if (byId.isNotEmpty) {
-      await d.update('folders', {'name': f.name, 'sort_order': f.sortOrder}, where: 'id = ?', whereArgs: [f.id]);
+      await d.update(
+        'folders',
+        {'name': f.name, 'sort_order': f.sortOrder},
+        where: 'id = ?',
+        whereArgs: [f.id],
+      );
       return;
     }
-    await d.insert('folders', {'id': f.id, 'name': f.name, 'sort_order': f.sortOrder}, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await d.insert('folders', {
+      'id': f.id,
+      'name': f.name,
+      'sort_order': f.sortOrder,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
   }
 
   Future<void> deleteFolder(String id) async {
     final d = await db;
     await d.transaction((txn) async {
-      await txn.update('links', {'folder_id': null}, where: 'folder_id = ?', whereArgs: [id]);
+      await txn.update(
+        'links',
+        {'folder_id': null},
+        where: 'folder_id = ?',
+        whereArgs: [id],
+      );
       await txn.delete('folders', where: 'id = ?', whereArgs: [id]);
     });
   }
@@ -1679,14 +2077,17 @@ class AppRepository {
     });
   }
 
-  Future<bool?> getBool(String key) async => (await SharedPreferences.getInstance()).getBool(key);
+  Future<bool?> getBool(String key) async =>
+      (await SharedPreferences.getInstance()).getBool(key);
 
-  Future<void> saveBool(String key, bool value) async => (await SharedPreferences.getInstance()).setBool(key, value);
+  Future<void> saveBool(String key, bool value) async =>
+      (await SharedPreferences.getInstance()).setBool(key, value);
 
-  Future<String?> getString(String key) async => (await SharedPreferences.getInstance()).getString(key);
+  Future<String?> getString(String key) async =>
+      (await SharedPreferences.getInstance()).getString(key);
 
-  Future<void> saveString(String key, String value) async => (await SharedPreferences.getInstance()).setString(key, value);
-
+  Future<void> saveString(String key, String value) async =>
+      (await SharedPreferences.getInstance()).setString(key, value);
 }
 
 class CloudSyncService {
@@ -1708,11 +2109,15 @@ class CloudSyncService {
       try {
         await client.from('folders').upsert(row, onConflict: 'id');
       } catch (_) {
-        await client.from('folders').update({
-          'sort_order': folder.sortOrder,
-          'updated_at': DateTime.now().toIso8601String(),
-          'deleted_at': null,
-        }).eq('user_id', userId).eq('name', folder.name);
+        await client
+            .from('folders')
+            .update({
+              'sort_order': folder.sortOrder,
+              'updated_at': DateTime.now().toIso8601String(),
+              'deleted_at': null,
+            })
+            .eq('user_id', userId)
+            .eq('name', folder.name);
       }
     }
   }
@@ -1730,24 +2135,38 @@ class CloudSyncService {
       try {
         await client.from('tags').upsert(row, onConflict: 'id');
       } catch (_) {
-        await client.from('tags').update({
-          'updated_at': DateTime.now().toIso8601String(),
-          'deleted_at': null,
-        }).eq('user_id', userId).eq('name', tag.name);
+        await client
+            .from('tags')
+            .update({
+              'updated_at': DateTime.now().toIso8601String(),
+              'deleted_at': null,
+            })
+            .eq('user_id', userId)
+            .eq('name', tag.name);
       }
     }
   }
 
   Future<void> markFolderDeleted(String userId, String folderId) async {
-    await client.from('folders').update({
-      'deleted_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('user_id', userId).eq('id', folderId);
+    await client
+        .from('folders')
+        .update({
+          'deleted_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('user_id', userId)
+        .eq('id', folderId);
   }
 
   Future<List<FolderItem>> fetchFolders(String userId) async {
-    final data = await client.from('folders').select().eq('user_id', userId).order('sort_order', ascending: true);
-    final rows = (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final data = await client
+        .from('folders')
+        .select()
+        .eq('user_id', userId)
+        .order('sort_order', ascending: true);
+    final rows = (data as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
 
     final out = <FolderItem>[];
     for (final row in rows) {
@@ -1762,8 +2181,14 @@ class CloudSyncService {
   }
 
   Future<List<TagItem>> fetchTags(String userId) async {
-    final data = await client.from('tags').select().eq('user_id', userId).order('name', ascending: true);
-    final rows = (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final data = await client
+        .from('tags')
+        .select()
+        .eq('user_id', userId)
+        .order('name', ascending: true);
+    final rows = (data as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
 
     final out = <TagItem>[];
     for (final row in rows) {
@@ -1814,7 +2239,9 @@ class CloudSyncService {
 
     for (var attempt = 0; attempt < 10; attempt++) {
       try {
-        await client.from('links').upsert(candidate, onConflict: 'user_id,normalized_url');
+        await client
+            .from('links')
+            .upsert(candidate, onConflict: 'user_id,normalized_url');
         return;
       } catch (e) {
         lastError = e;
@@ -1851,11 +2278,13 @@ class CloudSyncService {
         }
       }
 
-      final noFolderRow = Map<String, dynamic>.from(baseRow)..['folder_id'] = null;
+      final noFolderRow = Map<String, dynamic>.from(baseRow)
+        ..['folder_id'] = null;
       try {
         final exists = await updateExisting(noFolderRow);
         if (!exists) {
-          final insertRow = Map<String, dynamic>.from(candidate)..['folder_id'] = null;
+          final insertRow = Map<String, dynamic>.from(candidate)
+            ..['folder_id'] = null;
           await client.from('links').insert(insertRow);
         }
         return;
@@ -1875,7 +2304,10 @@ class CloudSyncService {
   bool _removeUnknownLinkColumn(Map<String, dynamic> payload, Object error) {
     final message = '$error';
     final patterns = [
-      RegExp(r'column\s+"?([a-zA-Z0-9_]+)"?\s+does not exist', caseSensitive: false),
+      RegExp(
+        r'column\s+"?([a-zA-Z0-9_]+)"?\s+does not exist',
+        caseSensitive: false,
+      ),
       RegExp(r"find the '([a-zA-Z0-9_]+)' column", caseSensitive: false),
       RegExp(r"'([a-zA-Z0-9_]+)'\s+column", caseSensitive: false),
     ];
@@ -1893,21 +2325,31 @@ class CloudSyncService {
   }
 
   Future<void> markDeleted(String userId, String normalizedUrl) async {
-    await client.from('links').update({
-      'deleted_at': DateTime.now().toIso8601String(),
-      'updated_at': DateTime.now().toIso8601String(),
-    }).eq('user_id', userId).eq('normalized_url', normalizedUrl);
+    await client
+        .from('links')
+        .update({
+          'deleted_at': DateTime.now().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('user_id', userId)
+        .eq('normalized_url', normalizedUrl);
   }
 
   Future<List<LinkItem>> fetchLinks(String userId) async {
     dynamic data;
     try {
-      data = await client.from('links').select().eq('user_id', userId).order('updated_at', ascending: false);
+      data = await client
+          .from('links')
+          .select()
+          .eq('user_id', userId)
+          .order('updated_at', ascending: false);
     } catch (_) {
       data = await client.from('links').select().eq('user_id', userId);
     }
 
-    final rows = (data as List).map((e) => Map<String, dynamic>.from(e as Map)).toList();
+    final rows = (data as List)
+        .map((e) => Map<String, dynamic>.from(e as Map))
+        .toList();
 
     final out = <LinkItem>[];
     for (final row in rows) {
@@ -1916,32 +2358,40 @@ class CloudSyncService {
       final url = (row['url'] as String?) ?? '';
       if (url.isEmpty || _isAuthCallbackUrl(url)) continue;
       final normalized = (row['normalized_url'] as String?) ?? _normalize(url);
-      final createdAt = DateTime.tryParse((row['created_at'] as String?) ?? '') ?? DateTime.now();
-      final updatedAt = DateTime.tryParse((row['updated_at'] as String?) ?? '') ?? createdAt;
-      final sharedAt = DateTime.tryParse((row['shared_at'] as String?) ?? '') ?? createdAt;
+      final createdAt =
+          DateTime.tryParse((row['created_at'] as String?) ?? '') ??
+          DateTime.now();
+      final updatedAt =
+          DateTime.tryParse((row['updated_at'] as String?) ?? '') ?? createdAt;
+      final sharedAt =
+          DateTime.tryParse((row['shared_at'] as String?) ?? '') ?? createdAt;
 
-      out.add(LinkItem(
-        id: (row['id'] as String?) ?? _uuid.v4(),
-        url: url,
-        normalizedUrl: normalized,
-        title: (row['title'] as String?) ?? url,
-        description: (row['description'] as String?) ?? '',
-        imageUrl: (row['image_url'] as String?) ?? '',
-        domain: (row['domain'] as String?) ?? (Uri.tryParse(url)?.host ?? ''),
-        faviconUrl: (row['favicon_url'] as String?) ?? '',
-        createdAt: createdAt,
-        updatedAt: updatedAt,
-        sharedAt: sharedAt,
-        isRead: _toBool(row['is_read']),
-        isStarred: _toBool(row['is_starred']),
-        isArchived: _toBool(row['is_archived']),
-        tags: _toTags(row['tags']),
-        folderId: row['folder_id'] as String?,
-        note: (row['note'] as String?) ?? '',
-        sourceApp: row['source_app'] as String?,
-        lastOpenedAt: DateTime.tryParse((row['last_opened_at'] as String?) ?? ''),
-        mediaUrls: _toMediaUrls(row['media_urls']),
-      ));
+      out.add(
+        LinkItem(
+          id: (row['id'] as String?) ?? _uuid.v4(),
+          url: url,
+          normalizedUrl: normalized,
+          title: (row['title'] as String?) ?? url,
+          description: (row['description'] as String?) ?? '',
+          imageUrl: (row['image_url'] as String?) ?? '',
+          domain: (row['domain'] as String?) ?? (Uri.tryParse(url)?.host ?? ''),
+          faviconUrl: (row['favicon_url'] as String?) ?? '',
+          createdAt: createdAt,
+          updatedAt: updatedAt,
+          sharedAt: sharedAt,
+          isRead: _toBool(row['is_read']),
+          isStarred: _toBool(row['is_starred']),
+          isArchived: _toBool(row['is_archived']),
+          tags: _toTags(row['tags']),
+          folderId: row['folder_id'] as String?,
+          note: (row['note'] as String?) ?? '',
+          sourceApp: row['source_app'] as String?,
+          lastOpenedAt: DateTime.tryParse(
+            (row['last_opened_at'] as String?) ?? '',
+          ),
+          mediaUrls: _toMediaUrls(row['media_urls']),
+        ),
+      );
     }
     return out;
   }
@@ -1964,11 +2414,18 @@ class CloudSyncService {
         try {
           final decoded = jsonDecode(trimmed);
           if (decoded is List) {
-            return decoded.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+            return decoded
+                .map((e) => '$e'.trim())
+                .where((e) => e.isNotEmpty)
+                .toList();
           }
         } catch (_) {}
       }
-      return trimmed.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+      return trimmed
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
     }
     return const [];
   }
@@ -1983,10 +2440,17 @@ class CloudSyncService {
       try {
         final decoded = jsonDecode(trimmed);
         if (decoded is List) {
-          return decoded.map((e) => '$e'.trim()).where((e) => e.isNotEmpty).toList();
+          return decoded
+              .map((e) => '$e'.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
         }
       } catch (_) {
-        return trimmed.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+        return trimmed
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
       }
     }
     return const [];
@@ -2012,7 +2476,9 @@ class ReminderService {
       '인박스 리마인더',
       '읽지 않은 링크 $unread개가 있습니다.',
       RepeatInterval.daily,
-      const NotificationDetails(android: AndroidNotificationDetails('daily', 'Daily')),
+      const NotificationDetails(
+        android: AndroidNotificationDetails('daily', 'Daily'),
+      ),
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
   }
@@ -2034,20 +2500,26 @@ class ShareBridge {
         if (raw.trim().isEmpty || raw == '[]') return const [];
         final decoded = jsonDecode(raw);
         if (decoded is List) {
-          return decoded.map((e) {
-            if (e is Map) return Map<String, dynamic>.from(e);
-            if (e is String) return {'url': e, 'title': ''};
-            return <String, dynamic>{};
-          }).where((e) => (e['url'] as String?)?.isNotEmpty == true).toList();
+          return decoded
+              .map((e) {
+                if (e is Map) return Map<String, dynamic>.from(e);
+                if (e is String) return {'url': e, 'title': ''};
+                return <String, dynamic>{};
+              })
+              .where((e) => (e['url'] as String?)?.isNotEmpty == true)
+              .toList();
         }
       }
 
       if (raw is List) {
-        return raw.map((e) {
-          if (e is Map) return Map<String, dynamic>.from(e);
-          if (e is String) return {'url': e, 'title': ''};
-          return <String, dynamic>{};
-        }).where((e) => (e['url'] as String?)?.isNotEmpty == true).toList();
+        return raw
+            .map((e) {
+              if (e is Map) return Map<String, dynamic>.from(e);
+              if (e is String) return {'url': e, 'title': ''};
+              return <String, dynamic>{};
+            })
+            .where((e) => (e['url'] as String?)?.isNotEmpty == true)
+            .toList();
       }
 
       return const [];
@@ -2058,7 +2530,15 @@ class ShareBridge {
 }
 
 class Meta {
-  const Meta({required this.domain, required this.favicon, this.title, this.description, this.image, this.profileImage, this.mediaUrls = const []});
+  const Meta({
+    required this.domain,
+    required this.favicon,
+    this.title,
+    this.description,
+    this.image,
+    this.profileImage,
+    this.mediaUrls = const [],
+  });
 
   final String domain;
   final String favicon;
@@ -2091,12 +2571,15 @@ class Metadata {
     // 특히 2025년 기준 Twitterbot UA와 브라우저 핵심 헤더 조합이 안정적임
     const socialCrawlerUA = 'Twitterbot/1.0';
     final useSocialCrawler = isThreads || isX;
-    final userAgent = useSocialCrawler ? socialCrawlerUA : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
+    final userAgent = useSocialCrawler
+        ? socialCrawlerUA
+        : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
 
     String? youtubeImage;
     if (domain.contains('youtube.com') || domain.contains('youtu.be')) {
       final videoId = _extractYoutubeId(url);
-      if (videoId != null) youtubeImage = 'https://img.youtube.com/vi/$videoId/maxresdefault.jpg';
+      if (videoId != null)
+        youtubeImage = 'https://img.youtube.com/vi/$videoId/maxresdefault.jpg';
     }
 
     final client = http.Client();
@@ -2111,8 +2594,10 @@ class Metadata {
       var request = http.Request('GET', normalizedUri);
       // 도메인에 따라 적절한 User-Agent 및 브라우저 힌트 헤더 설정
       request.headers['User-Agent'] = userAgent;
-      request.headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
-      request.headers['Accept-Language'] = 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
+      request.headers['Accept'] =
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
+      request.headers['Accept-Language'] =
+          'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
       if (useSocialCrawler) {
         request.headers['Sec-Fetch-Dest'] = 'document';
         request.headers['Sec-Fetch-Mode'] = 'navigate';
@@ -2129,11 +2614,13 @@ class Metadata {
 
       // 2. 만약 네이버 카페 PC 버전으로 리다이렉트 되었다면, 모바일로 강제 전환 후 재요청
       final mobileTarget = _toNaverCafeMobileUrl(finalUrl);
-      if (mobileTarget != null && mobileTarget.toString() != finalUrl.toString()) {
+      if (mobileTarget != null &&
+          mobileTarget.toString() != finalUrl.toString()) {
         debugPrint('Converting Naver URL to Mobile: $mobileTarget');
         final mRequest = http.Request('GET', mobileTarget);
         mRequest.headers['User-Agent'] = userAgent;
-        mRequest.headers['Accept-Language'] = 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
+        mRequest.headers['Accept-Language'] =
+            'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
         mRequest.followRedirects = true;
         mRequest.maxRedirects = 5;
 
@@ -2143,10 +2630,19 @@ class Metadata {
         finalDomain = finalUrl.host.replaceFirst('www.', '');
       }
 
-      if ((_isXDomain(domain) || _isXDomain(finalDomain)) && res.statusCode >= 400) {
+      if ((_isXDomain(domain) || _isXDomain(finalDomain)) &&
+          res.statusCode >= 400) {
         final xSource = _isXDomain(finalUrl.host) ? finalUrl : uri;
-        final xFallback = await _fetchXFallback(client, xSource, requestTimeout);
-        final xOEmbed = await _fetchXOEmbedFallback(client, xSource, requestTimeout);
+        final xFallback = await _fetchXFallback(
+          client,
+          xSource,
+          requestTimeout,
+        );
+        final xOEmbed = await _fetchXOEmbedFallback(
+          client,
+          xSource,
+          requestTimeout,
+        );
 
         if (xFallback != null || xOEmbed != null) {
           final media = _mergeUniqueUrls(
@@ -2160,9 +2656,20 @@ class Metadata {
           return Meta(
             domain: _isXDomain(finalDomain) ? finalDomain : domain,
             favicon: favicon,
-            title: _firstNonBlank([xFallback?['title'] as String?, xOEmbed?['title'] as String?, uri.toString()]),
-            description: _firstNonBlank([xFallback?['description'] as String?, xOEmbed?['description'] as String?]),
-            image: _firstNonBlank([xFallback?['image'] as String?, xOEmbed?['image'] as String?, media.firstOrNull]),
+            title: _firstNonBlank([
+              xFallback?['title'] as String?,
+              xOEmbed?['title'] as String?,
+              uri.toString(),
+            ]),
+            description: _firstNonBlank([
+              xFallback?['description'] as String?,
+              xOEmbed?['description'] as String?,
+            ]),
+            image: _firstNonBlank([
+              xFallback?['image'] as String?,
+              xOEmbed?['image'] as String?,
+              media.firstOrNull,
+            ]),
             profileImage: mergedProfile,
             mediaUrls: media,
           );
@@ -2177,12 +2684,24 @@ class Metadata {
       // 3. 데이터 추출 (네이버 카페 모바일 특화 셀렉터 추가)
       String? title = _firstNonBlank([
         _findMeta(document, ['og:title', 'twitter:title']),
-        _textOfSelectors(document, ['h2.tit', '.title_area .title', '.article_title', '.item_title', '.title', '.ArticleTitle', '.se-title-text']),
+        _textOfSelectors(document, [
+          'h2.tit',
+          '.title_area .title',
+          '.article_title',
+          '.item_title',
+          '.title',
+          '.ArticleTitle',
+          '.se-title-text',
+        ]),
         document.querySelector('title')?.text,
       ]);
 
       String? description = _firstNonBlank([
-        _findMeta(document, ['og:description', 'twitter:description', 'description']),
+        _findMeta(document, [
+          'og:description',
+          'twitter:description',
+          'description',
+        ]),
         _textOfSelectors(document, [
           '.post_area',
           '.article_viewer',
@@ -2197,7 +2716,11 @@ class Metadata {
         ]),
       ]);
 
-      String? image = _findMeta(document, ['og:image', 'twitter:image', 'image']);
+      String? image = _findMeta(document, [
+        'og:image',
+        'twitter:image',
+        'image',
+      ]);
       image ??= _firstImageFromSelectors(document, [
         '.post_area img',
         '.article_viewer img',
@@ -2235,7 +2758,11 @@ class Metadata {
           image = threadMediaUrls.firstOrNull;
         }
 
-        final oEmbed = await _fetchThreadsOEmbedFallback(client, finalUrl, requestTimeout);
+        final oEmbed = await _fetchThreadsOEmbedFallback(
+          client,
+          finalUrl,
+          requestTimeout,
+        );
         if (oEmbed != null) {
           if (_isWeakThreadsTitle(title)) {
             title = _firstNonBlank([
@@ -2244,23 +2771,35 @@ class Metadata {
               title,
             ]);
           }
-          description = _firstNonBlank([description, oEmbed['description'] as String?]);
-          threadProfileImage = _firstNonBlank([threadProfileImage, oEmbed['profileImage'] as String?]);
+          description = _firstNonBlank([
+            description,
+            oEmbed['description'] as String?,
+          ]);
+          threadProfileImage = _firstNonBlank([
+            threadProfileImage,
+            oEmbed['profileImage'] as String?,
+          ]);
         }
 
         threadProfileImage = _firstNonBlank([
           threadProfileImage,
-          _threadsProfileFromHandle(_extractThreadsHandleFromUrl(finalUrl.toString())),
+          _threadsProfileFromHandle(
+            _extractThreadsHandleFromUrl(finalUrl.toString()),
+          ),
         ]);
 
         // JSON-LD에서 내용을 추가로 시도 (크롤러 UA 사용 시 풍부한 데이터가 나옴)
-        final scripts = document.querySelectorAll('script[type="application/ld+json"]');
+        final scripts = document.querySelectorAll(
+          'script[type="application/ld+json"]',
+        );
         for (final script in scripts) {
           try {
             final data = jsonDecode(script.text);
             if (data is Map) {
-              final text = data['articleBody'] ?? data['description'] ?? data['text'];
-              if (text != null && text.toString().length > (description?.length ?? 0)) {
+              final text =
+                  data['articleBody'] ?? data['description'] ?? data['text'];
+              if (text != null &&
+                  text.toString().length > (description?.length ?? 0)) {
                 description = text.toString();
               }
             }
@@ -2279,7 +2818,11 @@ class Metadata {
       }
 
       if (_isXDomain(finalDomain) && _isWeakXMeta(title, description, image)) {
-        final xFallback = await _fetchXFallback(client, finalUrl, requestTimeout);
+        final xFallback = await _fetchXFallback(
+          client,
+          finalUrl,
+          requestTimeout,
+        );
         if (xFallback != null) {
           final fallbackTitle = xFallback['title'];
           if (_isGenericXTitle(title) && fallbackTitle != null) {
@@ -2287,12 +2830,22 @@ class Metadata {
           }
           description = _firstNonBlank([description, xFallback['description']]);
           image = _firstNonBlank([image, xFallback['image']]);
-          xProfileImage = _pickBetterXProfile(xProfileImage, xFallback['profileImage'] as String?);
-          xMediaUrls = _mergeUniqueUrls(xMediaUrls, _toStringList(xFallback['mediaUrls']));
+          xProfileImage = _pickBetterXProfile(
+            xProfileImage,
+            xFallback['profileImage'] as String?,
+          );
+          xMediaUrls = _mergeUniqueUrls(
+            xMediaUrls,
+            _toStringList(xFallback['mediaUrls']),
+          );
         }
 
         if (_isWeakXMeta(title, description, image)) {
-          final xOEmbed = await _fetchXOEmbedFallback(client, finalUrl, requestTimeout);
+          final xOEmbed = await _fetchXOEmbedFallback(
+            client,
+            finalUrl,
+            requestTimeout,
+          );
           if (xOEmbed != null) {
             final oEmbedTitle = xOEmbed['title'];
             if (_isGenericXTitle(title) && oEmbedTitle != null) {
@@ -2300,20 +2853,37 @@ class Metadata {
             }
             description = _firstNonBlank([description, xOEmbed['description']]);
             image = _firstNonBlank([image, xOEmbed['image']]);
-            xProfileImage = _pickBetterXProfile(xProfileImage, xOEmbed['profileImage'] as String?);
-            xMediaUrls = _mergeUniqueUrls(xMediaUrls, _toStringList(xOEmbed['mediaUrls']));
+            xProfileImage = _pickBetterXProfile(
+              xProfileImage,
+              xOEmbed['profileImage'] as String?,
+            );
+            xMediaUrls = _mergeUniqueUrls(
+              xMediaUrls,
+              _toStringList(xOEmbed['mediaUrls']),
+            );
           }
         }
       }
 
       // 4. 네이버 카페 제목이 여전히 불량할 경우 (설명 첫 줄 활용)
-      if ((title == null || title.trim().isEmpty || title.trim() == '네이버 카페' || title.trim() == 'Naver Cafe') && description != null) {
-        final lines = description.split('\n').map((l) => l.trim()).where((l) => l.length > 2).toList();
+      if ((title == null ||
+              title.trim().isEmpty ||
+              title.trim() == '네이버 카페' ||
+              title.trim() == 'Naver Cafe') &&
+          description != null) {
+        final lines = description
+            .split('\n')
+            .map((l) => l.trim())
+            .where((l) => l.length > 2)
+            .toList();
         if (lines.isNotEmpty) title = lines.first;
       }
 
       // 제목이 여전히 없으면 URL이나 도메인 사용
-      title = _firstNonBlank([title, finalUrl.toString().length > 30 ? finalDomain : finalUrl.toString()]);
+      title = _firstNonBlank([
+        title,
+        finalUrl.toString().length > 30 ? finalDomain : finalUrl.toString(),
+      ]);
       description = _firstNonBlank([description]);
 
       // 이미지 절대 경로 해결
@@ -2329,7 +2899,9 @@ class Metadata {
 
       final mediaUrls = _isXDomain(finalDomain)
           ? xMediaUrls
-          : (_isThreadsDomain(finalDomain) ? threadMediaUrls : const <String>[]);
+          : (_isThreadsDomain(finalDomain)
+                ? threadMediaUrls
+                : const <String>[]);
 
       return Meta(
         domain: finalDomain,
@@ -2337,7 +2909,9 @@ class Metadata {
         title: title,
         description: description,
         image: image,
-        profileImage: _isThreadsDomain(finalDomain) ? threadProfileImage : xProfileImage,
+        profileImage: _isThreadsDomain(finalDomain)
+            ? threadProfileImage
+            : xProfileImage,
         mediaUrls: mediaUrls,
       );
     } catch (e) {
@@ -2345,7 +2919,11 @@ class Metadata {
 
       if (_isThreadsDomain(domain)) {
         try {
-          final oEmbed = await _fetchThreadsOEmbedFallback(client, uri, const Duration(seconds: 3));
+          final oEmbed = await _fetchThreadsOEmbedFallback(
+            client,
+            uri,
+            const Duration(seconds: 3),
+          );
           if (oEmbed != null) {
             final fallbackHandle = _extractThreadsHandleFromUrl(uri.toString());
             final fallbackTitle = _firstNonBlank([
@@ -2393,7 +2971,9 @@ class Metadata {
         final iframeClubId = iframeUri.queryParameters['clubid'];
         final iframeArticleId = iframeUri.queryParameters['articleid'];
         if (_isNotBlank(iframeClubId) && _isNotBlank(iframeArticleId)) {
-          return Uri.parse('https://m.cafe.naver.com/${iframeClubId!.trim()}/${iframeArticleId!.trim()}');
+          return Uri.parse(
+            'https://m.cafe.naver.com/${iframeClubId!.trim()}/${iframeArticleId!.trim()}',
+          );
         }
       }
     }
@@ -2401,12 +2981,18 @@ class Metadata {
     final clubId = uri.queryParameters['clubid'];
     final articleId = uri.queryParameters['articleid'];
     if (_isNotBlank(clubId) && _isNotBlank(articleId)) {
-      return Uri.parse('https://m.cafe.naver.com/${clubId!.trim()}/${articleId!.trim()}');
+      return Uri.parse(
+        'https://m.cafe.naver.com/${clubId!.trim()}/${articleId!.trim()}',
+      );
     }
 
     final pathSegments = uri.pathSegments.where((s) => s.isNotEmpty).toList();
-    if (host == 'cafe.naver.com' && pathSegments.length >= 2 && pathSegments[0] != 'ca-fe') {
-      return Uri.parse('https://m.cafe.naver.com/${pathSegments[0]}/${pathSegments[1]}');
+    if (host == 'cafe.naver.com' &&
+        pathSegments.length >= 2 &&
+        pathSegments[0] != 'ca-fe') {
+      return Uri.parse(
+        'https://m.cafe.naver.com/${pathSegments[0]}/${pathSegments[1]}',
+      );
     }
 
     return null;
@@ -2415,7 +3001,9 @@ class Metadata {
   static String? _findMeta(dynamic doc, List<String> properties) {
     for (final prop in properties) {
       // property 또는 name 속성 모두 체크
-      final element = doc.querySelector('meta[property="$prop"]') ?? doc.querySelector('meta[name="$prop"]');
+      final element =
+          doc.querySelector('meta[property="$prop"]') ??
+          doc.querySelector('meta[name="$prop"]');
       final content = element?.attributes['content'];
       if (content != null && content.trim().isNotEmpty) return content.trim();
     }
@@ -2423,7 +3011,10 @@ class Metadata {
   }
 
   static String? _extractYoutubeId(String url) {
-    final reg = RegExp(r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})', caseSensitive: false);
+    final reg = RegExp(
+      r'(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})',
+      caseSensitive: false,
+    );
     return reg.firstMatch(url)?.group(1);
   }
 
@@ -2447,7 +3038,10 @@ class Metadata {
           element.attributes['src'],
         ]);
         if (src == null || src.startsWith('data:')) continue;
-        if (src.contains('spacer') || src.contains('blank') || src.contains('default_profile')) continue;
+        if (src.contains('spacer') ||
+            src.contains('blank') ||
+            src.contains('default_profile'))
+          continue;
         return src;
       }
     }
@@ -2475,9 +3069,14 @@ class Metadata {
     return cleaned.isEmpty ? null : cleaned;
   }
 
-  static bool _isNotBlank(String? value) => value != null && value.trim().isNotEmpty;
+  static bool _isNotBlank(String? value) =>
+      value != null && value.trim().isNotEmpty;
 
-  static String? _extractThreadsProfileImageFromDocument(dynamic doc, Uri baseUrl, {List<String> contentMediaUrls = const []}) {
+  static String? _extractThreadsProfileImageFromDocument(
+    dynamic doc,
+    Uri baseUrl, {
+    List<String> contentMediaUrls = const [],
+  }) {
     final candidates = <String>[];
 
     void addCandidate(String? raw) {
@@ -2522,7 +3121,10 @@ class Metadata {
     }
 
     // 4. 스크립트 후보
-    for (final candidate in _threadProfileImageCandidatesFromScripts(doc, baseUrl)) {
+    for (final candidate in _threadProfileImageCandidatesFromScripts(
+      doc,
+      baseUrl,
+    )) {
       addCandidate(candidate);
     }
 
@@ -2537,31 +3139,37 @@ class Metadata {
     final unique = _mergeUniqueUrls([], candidates);
 
     // 1st pass: Extremely likely profile images (ignore content overlap)
-  for (final url in unique) {
-    final lower = url.toLowerCase();
-    if (_isThreadsBrandLogoUrl(lower)) continue;
-    if (_looksLikeThreadsProfileImage(lower)) return url;
-  }
-
-  // 2nd pass: Other candidates that don't overlap with content
-  for (final url in unique) {
-    final lower = url.toLowerCase();
-    if (_isThreadsBrandLogoUrl(lower)) continue;
-    if (overlapsContent(url)) continue;
-    return url;
-  }
-
-  if (contentMediaUrls.isEmpty) {
     for (final url in unique) {
-      if (_isThreadsBrandLogoUrl(url.toLowerCase())) continue;
+      final lower = url.toLowerCase();
+      if (_isThreadsBrandLogoUrl(lower)) continue;
+      if (_looksLikeThreadsProfileImage(lower)) return url;
+    }
+
+    // 2nd pass: Other candidates that don't overlap with content
+    for (final url in unique) {
+      final lower = url.toLowerCase();
+      if (_isThreadsBrandLogoUrl(lower)) continue;
+      if (overlapsContent(url)) continue;
       return url;
     }
-  }
+
+    if (contentMediaUrls.isEmpty) {
+      for (final url in unique) {
+        if (_isThreadsBrandLogoUrl(url.toLowerCase())) continue;
+        return url;
+      }
+    }
 
     return null;
   }
 
-  static List<String> _extractThreadMediaUrlsFromDocument(dynamic doc, Uri baseUrl, String? previewImage, {String? profileImage, bool includeMeta = true}) {
+  static List<String> _extractThreadMediaUrlsFromDocument(
+    dynamic doc,
+    Uri baseUrl,
+    String? previewImage, {
+    String? profileImage,
+    bool includeMeta = true,
+  }) {
     final selectorCandidates = _firstImageCandidatesFromSelectors(doc, const [
       'article img',
       'main img',
@@ -2571,19 +3179,28 @@ class Metadata {
       '.x1lliihq img',
     ]).map((raw) => baseUrl.resolve(raw).toString());
 
-    final metaCandidates = includeMeta ? _threadMediaFromMeta(doc, baseUrl) : const <String>[];
+    final metaCandidates = includeMeta
+        ? _threadMediaFromMeta(doc, baseUrl)
+        : const <String>[];
     final scriptCandidates = _threadMediaFromScripts(doc, baseUrl);
     final filtered = <String>[];
-    for (final url in [...metaCandidates, ...selectorCandidates, ...scriptCandidates]) {
+    for (final url in [
+      ...metaCandidates,
+      ...selectorCandidates,
+      ...scriptCandidates,
+    ]) {
       final lower = url.toLowerCase();
-      if (!lower.startsWith('http://') && !lower.startsWith('https://')) continue;
+      if (!lower.startsWith('http://') && !lower.startsWith('https://'))
+        continue;
       if (_isLikelyNonContentImage(lower)) continue;
       if (_urlsPointToSameResource(url, profileImage)) continue;
       filtered.add(url);
     }
 
     final merged = _mergeUniqueUrls([], filtered);
-    final preview = previewImage == null ? null : baseUrl.resolve(previewImage).toString();
+    final preview = previewImage == null
+        ? null
+        : baseUrl.resolve(previewImage).toString();
     if (preview != null &&
         preview.isNotEmpty &&
         !_isLikelyNonContentImage(preview.toLowerCase()) &&
@@ -2593,7 +3210,10 @@ class Metadata {
     return merged;
   }
 
-  static List<String> _firstImageCandidatesFromSelectors(dynamic doc, List<String> selectors) {
+  static List<String> _firstImageCandidatesFromSelectors(
+    dynamic doc,
+    List<String> selectors,
+  ) {
     final out = <String>[];
     final seen = <String>{};
     for (final selector in selectors) {
@@ -2663,12 +3283,21 @@ class Metadata {
     return out;
   }
 
-  static List<String> _threadProfileImageHintsFromScripts(dynamic doc, Uri baseUrl) {
+  static List<String> _threadProfileImageHintsFromScripts(
+    dynamic doc,
+    Uri baseUrl,
+  ) {
     final out = <String>[];
     final seen = <String>{};
     final patterns = [
-      RegExp(r'''profile_pic_url(?:_hd)?["']?\s*[:=]\s*["']([^"']+)["']''', caseSensitive: false),
-      RegExp(r'''avatar(?:_url)?["']?\s*[:=]\s*["']([^"']+)["']''', caseSensitive: false),
+      RegExp(
+        r'''profile_pic_url(?:_hd)?["']?\s*[:=]\s*["']([^"']+)["']''',
+        caseSensitive: false,
+      ),
+      RegExp(
+        r'''avatar(?:_url)?["']?\s*[:=]\s*["']([^"']+)["']''',
+        caseSensitive: false,
+      ),
     ];
 
     for (final script in doc.querySelectorAll('script')) {
@@ -2694,7 +3323,10 @@ class Metadata {
     return out;
   }
 
-  static List<String> _threadProfileImageCandidatesFromScripts(dynamic doc, Uri baseUrl) {
+  static List<String> _threadProfileImageCandidatesFromScripts(
+    dynamic doc,
+    Uri baseUrl,
+  ) {
     final out = <String>[];
     final seen = <String>{};
     final profileRegex = RegExp(
@@ -2747,7 +3379,10 @@ class Metadata {
 
   static bool _isThreadsDomain(String host) {
     final h = host.toLowerCase();
-    return h == 'threads.net' || h.endsWith('.threads.net') || h == 'threads.com' || h.endsWith('.threads.com');
+    return h == 'threads.net' ||
+        h.endsWith('.threads.net') ||
+        h == 'threads.com' ||
+        h.endsWith('.threads.com');
   }
 
   static bool _isXDomain(String host) {
@@ -2774,7 +3409,11 @@ class Metadata {
     return false;
   }
 
-  static Future<Map<String, dynamic>?> _fetchThreadsOEmbedFallback(http.Client client, Uri sourceUrl, Duration timeout) async {
+  static Future<Map<String, dynamic>?> _fetchThreadsOEmbedFallback(
+    http.Client client,
+    Uri sourceUrl,
+    Duration timeout,
+  ) async {
     final hosts = ['www.threads.net', 'www.threads.com'];
 
     for (final host in hosts) {
@@ -2786,7 +3425,8 @@ class Metadata {
 
         final request = http.Request('GET', oembedUri);
         request.headers['Accept'] = 'application/json';
-        request.headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
+        request.headers['User-Agent'] =
+            'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
         request.followRedirects = true;
         request.maxRedirects = 5;
 
@@ -2794,18 +3434,28 @@ class Metadata {
         final response = await http.Response.fromStream(streamed);
         if (response.statusCode < 200 || response.statusCode >= 400) continue;
 
-        final raw = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+        final raw = jsonDecode(
+          utf8.decode(response.bodyBytes, allowMalformed: true),
+        );
         if (raw is! Map) continue;
         final map = Map<String, dynamic>.from(raw);
 
         final title = _normalizeText(map['title'] as String?);
-        final htmlDescription = _extractTweetTextFromEmbedHtml(map['html'] as String?);
+        final htmlDescription = _extractTweetTextFromEmbedHtml(
+          map['html'] as String?,
+        );
         final authorName = _normalizeText(map['author_name'] as String?);
         final authorUrl = _normalizeText(map['author_url'] as String?);
-        final handle = _extractThreadsHandleFromUrl(authorUrl) ?? _extractThreadsHandleFromText(authorName);
+        final handle =
+            _extractThreadsHandleFromUrl(authorUrl) ??
+            _extractThreadsHandleFromText(authorName);
         final profileImage = _threadsProfileFromHandle(handle);
 
-        if (title == null && htmlDescription == null && authorName == null && profileImage == null) continue;
+        if (title == null &&
+            htmlDescription == null &&
+            authorName == null &&
+            profileImage == null)
+          continue;
         return {
           'title': title,
           'description': htmlDescription,
@@ -2847,20 +3497,29 @@ class Metadata {
   static bool _isGenericXTitle(String? title) {
     if (title == null) return true;
     final t = title.trim().toLowerCase();
-    return t.isEmpty || t == 'x' || t == 'twitter' || t == '트위터' || t == 'x / twitter' || t == 'x (formerly twitter)';
+    return t.isEmpty ||
+        t == 'x' ||
+        t == 'twitter' ||
+        t == '트위터' ||
+        t == 'x / twitter' ||
+        t == 'x (formerly twitter)';
   }
 
   static bool _isWeakXMeta(String? title, String? description, String? image) {
-    final hasDescription = description != null && description.trim().length >= 12;
+    final hasDescription =
+        description != null && description.trim().length >= 12;
     final hasImage = image != null && image.trim().isNotEmpty;
     final lowerTitle = title?.toLowerCase() ?? '';
     final lowerDesc = description?.toLowerCase() ?? '';
-    final blockedLike = lowerTitle.contains('attention required') ||
+    final blockedLike =
+        lowerTitle.contains('attention required') ||
         lowerTitle.contains('just a moment') ||
         lowerTitle.contains('access denied') ||
         lowerDesc.contains('cloudflare') ||
         lowerDesc.contains('enable javascript and cookies');
-    return blockedLike || _isGenericXTitle(title) || (!hasDescription && !hasImage);
+    return blockedLike ||
+        _isGenericXTitle(title) ||
+        (!hasDescription && !hasImage);
   }
 
   static Uri? _toFixupXUri(Uri uri) {
@@ -2869,14 +3528,20 @@ class Metadata {
     return uri.replace(host: 'fixupx.com');
   }
 
-  static Future<Map<String, dynamic>?> _fetchXFallback(http.Client client, Uri sourceUrl, Duration timeout) async {
+  static Future<Map<String, dynamic>?> _fetchXFallback(
+    http.Client client,
+    Uri sourceUrl,
+    Duration timeout,
+  ) async {
     final fallbackUri = _toFixupXUri(sourceUrl);
     if (fallbackUri == null) return null;
 
     try {
       final request = http.Request('GET', fallbackUri);
-      request.headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
-      request.headers['Accept-Language'] = 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
+      request.headers['User-Agent'] =
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
+      request.headers['Accept-Language'] =
+          'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
       request.followRedirects = true;
       request.maxRedirects = 5;
 
@@ -2891,12 +3556,18 @@ class Metadata {
         document.querySelector('title')?.text,
       ]);
       final description = _firstNonBlank([
-        _findMeta(document, ['og:description', 'twitter:description', 'description']),
+        _findMeta(document, [
+          'og:description',
+          'twitter:description',
+          'description',
+        ]),
       ]);
       final assets = _extractXAssetsFromDocument(document, fallbackUri);
-      final creatorHandle = _extractXHandle(_firstNonBlank([
-        _findMeta(document, ['twitter:site', 'twitter:creator']),
-      ]));
+      final creatorHandle = _extractXHandle(
+        _firstNonBlank([
+          _findMeta(document, ['twitter:site', 'twitter:creator']),
+        ]),
+      );
       final imageRaw = _firstNonBlank([
         _findMeta(document, ['og:image', 'twitter:image', 'image']),
       ]);
@@ -2905,12 +3576,20 @@ class Metadata {
         assets.mediaUrls.firstOrNull,
       ]);
 
-      if (title == null && description == null && image == null && assets.profileImageUrl == null && assets.mediaUrls.isEmpty) return null;
+      if (title == null &&
+          description == null &&
+          image == null &&
+          assets.profileImageUrl == null &&
+          assets.mediaUrls.isEmpty)
+        return null;
       return {
         'title': title,
         'description': description,
         'image': image,
-        'profileImage': _firstNonBlank([assets.profileImageUrl, _profileImageFromHandle(creatorHandle)]),
+        'profileImage': _firstNonBlank([
+          assets.profileImageUrl,
+          _profileImageFromHandle(creatorHandle),
+        ]),
         'mediaUrls': assets.mediaUrls,
       };
     } catch (_) {
@@ -2918,9 +3597,15 @@ class Metadata {
     }
   }
 
-  static Future<Map<String, dynamic>?> _fetchXOEmbedFallback(http.Client client, Uri sourceUrl, Duration timeout) async {
+  static Future<Map<String, dynamic>?> _fetchXOEmbedFallback(
+    http.Client client,
+    Uri sourceUrl,
+    Duration timeout,
+  ) async {
     final normalizedSource = _normalizeXSourceUri(sourceUrl);
-    if (!_isXDomain(normalizedSource.host) && !normalizedSource.host.toLowerCase().contains('twitter.com')) return null;
+    if (!_isXDomain(normalizedSource.host) &&
+        !normalizedSource.host.toLowerCase().contains('twitter.com'))
+      return null;
 
     try {
       final oembedUri = Uri.https('publish.twitter.com', '/oembed', {
@@ -2930,7 +3615,8 @@ class Metadata {
 
       final request = http.Request('GET', oembedUri);
       request.headers['Accept'] = 'application/json';
-      request.headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
+      request.headers['User-Agent'] =
+          'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
       request.followRedirects = true;
       request.maxRedirects = 5;
 
@@ -2938,11 +3624,15 @@ class Metadata {
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode < 200 || response.statusCode >= 400) return null;
 
-      final raw = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+      final raw = jsonDecode(
+        utf8.decode(response.bodyBytes, allowMalformed: true),
+      );
       if (raw is! Map) return null;
       final map = Map<String, dynamic>.from(raw);
 
-      final description = _extractTweetTextFromEmbedHtml(map['html'] as String?);
+      final description = _extractTweetTextFromEmbedHtml(
+        map['html'] as String?,
+      );
       final authorUrl = _normalizeText(map['author_url'] as String?);
       final handle = _extractXHandleFromUrl(authorUrl);
       final title = _firstNonBlank([
@@ -2968,12 +3658,22 @@ class Metadata {
   static XAssets _extractXAssetsFromDocument(dynamic doc, Uri baseUri) {
     final profileRaw = _firstNonBlank([
       doc.querySelector('link[rel="apple-touch-icon"]')?.attributes['href'],
-      doc.querySelector('meta[property="twitter:creator:image"]')?.attributes['content'],
-      doc.querySelector('meta[name="twitter:creator:image"]')?.attributes['content'],
-      doc.querySelector('meta[property="og:image:user_generated"]')?.attributes['content'],
+      doc
+          .querySelector('meta[property="twitter:creator:image"]')
+          ?.attributes['content'],
+      doc
+          .querySelector('meta[name="twitter:creator:image"]')
+          ?.attributes['content'],
+      doc
+          .querySelector('meta[property="og:image:user_generated"]')
+          ?.attributes['content'],
     ]);
-    final profileImageResolved = profileRaw == null ? null : baseUri.resolve(profileRaw).toString();
-    final profileImage = _isGenericXProfileImage(profileImageResolved) ? null : profileImageResolved;
+    final profileImageResolved = profileRaw == null
+        ? null
+        : baseUri.resolve(profileRaw).toString();
+    final profileImage = _isGenericXProfileImage(profileImageResolved)
+        ? null
+        : profileImageResolved;
 
     final media = <String>[];
     void addMediaFromMeta(String selector) {
@@ -2995,30 +3695,44 @@ class Metadata {
     addMediaFromMeta('meta[property="twitter:player:stream"]');
     addMediaFromMeta('meta[name="twitter:player:stream"]');
 
-    final mediaUrls = _mergeUniqueUrls([], media.where((e) {
-      final lower = e.toLowerCase();
-      if (lower.contains('default_profile') || lower.contains('profile_images') || lower.contains('avatar')) return false;
-      if (lower.contains('spacer') || lower.contains('blank')) return false;
-      return true;
-    }));
+    final mediaUrls = _mergeUniqueUrls(
+      [],
+      media.where((e) {
+        final lower = e.toLowerCase();
+        if (lower.contains('default_profile') ||
+            lower.contains('profile_images') ||
+            lower.contains('avatar'))
+          return false;
+        if (lower.contains('spacer') || lower.contains('blank')) return false;
+        return true;
+      }),
+    );
 
     return XAssets(profileImageUrl: profileImage, mediaUrls: mediaUrls);
   }
 
   static List<String> _toStringList(dynamic value) {
     if (value is List) {
-      return value.map((e) => _normalizeText(e?.toString())).whereType<String>().toList();
+      return value
+          .map((e) => _normalizeText(e?.toString()))
+          .whereType<String>()
+          .toList();
     }
     return const [];
   }
 
-  static List<String> _mergeUniqueUrls(Iterable<String> base, Iterable<String> extra) {
+  static List<String> _mergeUniqueUrls(
+    Iterable<String> base,
+    Iterable<String> extra,
+  ) {
     final seen = <String>{};
     final out = <String>[];
     for (final raw in [...base, ...extra]) {
       final normalized = _normalizeText(raw);
       if (normalized == null) continue;
-      if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) continue;
+      if (!normalized.startsWith('http://') &&
+          !normalized.startsWith('https://'))
+        continue;
       if (seen.add(normalized)) out.add(normalized);
     }
     return out;
@@ -3061,15 +3775,21 @@ class Metadata {
   static bool _isGenericXProfileImage(String? url) {
     final u = _normalizeText(url)?.toLowerCase();
     if (u == null || u.isEmpty) return true;
-    if (u.contains('abs.twimg.com/responsive-web/client-web/icon-ios')) return true;
-    if (u.contains('abs.twimg.com/responsive-web/client-web/icon-')) return true;
+    if (u.contains('abs.twimg.com/responsive-web/client-web/icon-ios'))
+      return true;
+    if (u.contains('abs.twimg.com/responsive-web/client-web/icon-'))
+      return true;
     if (u.endsWith('/icon-ios.png') || u.endsWith('/icon.svg')) return true;
     return false;
   }
 
   static Uri _normalizeXSourceUri(Uri uri) {
     final host = uri.host.toLowerCase();
-    if (host == 'x.com' || host.endsWith('.x.com') || host.contains('fixupx.com') || host.contains('fxtwitter.com') || host.contains('vxtwitter.com')) {
+    if (host == 'x.com' ||
+        host.endsWith('.x.com') ||
+        host.contains('fixupx.com') ||
+        host.contains('fxtwitter.com') ||
+        host.contains('vxtwitter.com')) {
       return uri.replace(host: 'twitter.com');
     }
     return uri;
@@ -3115,14 +3835,26 @@ class AuthEntryPage extends ConsumerWidget {
                 children: [
                   const Icon(Icons.inbox_rounded, size: 52),
                   const SizedBox(height: 16),
-                  const Text('인박스', textAlign: TextAlign.center, style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800)),
+                  const Text(
+                    '인박스',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 30, fontWeight: FontWeight.w800),
+                  ),
                   const SizedBox(height: 8),
-                  const Text('웹과 앱에서 같은 링크를 보려면 로그인하세요.', textAlign: TextAlign.center, style: TextStyle(color: Color(0xFF8B95A1))),
+                  const Text(
+                    '웹과 앱에서 같은 링크를 보려면 로그인하세요.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Color(0xFF8B95A1)),
+                  ),
                   const SizedBox(height: 24),
                   if (!cloudReady)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 12),
-                      child: Text('클라우드 설정이 없어 로그인 기능이 비활성화되었습니다.', textAlign: TextAlign.center, style: TextStyle(color: Colors.orange)),
+                      child: Text(
+                        '클라우드 설정이 없어 로그인 기능이 비활성화되었습니다.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(color: Colors.orange),
+                      ),
                     )
                   else ...[
                     FilledButton.icon(
@@ -3137,13 +3869,20 @@ class AuthEntryPage extends ConsumerWidget {
                         if (input == null) return;
                         try {
                           final outcome = await _submitEmailAuth(c, input);
-                          if (outcome == _EmailAuthOutcome.signUpPendingVerification) {
+                          if (outcome ==
+                              _EmailAuthOutcome.signUpPendingVerification) {
                             if (!context.mounted) return;
-                            await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.');
+                            await _showAuthInfoDialog(
+                              context,
+                              '회원 가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.',
+                            );
                           }
                         } catch (e) {
                           if (!context.mounted) return;
-                          await _showAuthErrorDialog(context, _friendlyAuthError(e));
+                          await _showAuthErrorDialog(
+                            context,
+                            _friendlyAuthError(e),
+                          );
                         }
                       },
                       icon: const Icon(Icons.login_rounded),
@@ -3172,7 +3911,8 @@ class RootPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appProvider);
     final c = ref.read(appProvider.notifier);
-    if (state.loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (state.loading)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     if (!state.authGatePassed) return const AuthEntryPage();
 
     return PopScope(
@@ -3216,9 +3956,19 @@ class RootPage extends ConsumerWidget {
           actions: [
             if (state.tab == 0)
               IconButton(
-                tooltip: state.themeMode == ThemeMode.dark ? '라이트 모드로 전환' : '다크 모드로 전환',
-                onPressed: () => c.setThemeMode(state.themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark),
-                icon: Icon(state.themeMode == ThemeMode.dark ? Icons.wb_sunny_rounded : Icons.nightlight_round),
+                tooltip: state.themeMode == ThemeMode.dark
+                    ? '라이트 모드로 전환'
+                    : '다크 모드로 전환',
+                onPressed: () => c.setThemeMode(
+                  state.themeMode == ThemeMode.dark
+                      ? ThemeMode.light
+                      : ThemeMode.dark,
+                ),
+                icon: Icon(
+                  state.themeMode == ThemeMode.dark
+                      ? Icons.wb_sunny_rounded
+                      : Icons.nightlight_round,
+                ),
               ),
           ],
         ),
@@ -3232,14 +3982,19 @@ class RootPage extends ConsumerWidget {
             ? FloatingActionButton.extended(
                 onPressed: () => _showSaveSheet(context, c),
                 icon: const Icon(Icons.add_rounded),
-                label: const Text('링크 추가', style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text(
+                  '링크 추가',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
                 elevation: 0,
                 highlightElevation: 0,
               )
             : null,
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
-            border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+            border: Border(
+              top: BorderSide(color: Theme.of(context).dividerColor),
+            ),
           ),
           child: NavigationBar(
             selectedIndex: state.tab,
@@ -3280,17 +4035,21 @@ class InboxPage extends ConsumerStatefulWidget {
   ConsumerState<InboxPage> createState() => _InboxPageState();
 }
 
-class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserver {
+class _InboxPageState extends ConsumerState<InboxPage>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(appProvider.notifier).onAppResumed());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => ref.read(appProvider.notifier).onAppResumed(),
+    );
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) ref.read(appProvider.notifier).onAppResumed();
+    if (state == AppLifecycleState.resumed)
+      ref.read(appProvider.notifier).onAppResumed();
   }
 
   @override
@@ -3313,7 +4072,9 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
             margin: const EdgeInsets.all(16),
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.3),
+              color: Theme.of(
+                context,
+              ).colorScheme.primaryContainer.withValues(alpha: 0.3),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -3324,13 +4085,27 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('클립보드 링크 감지', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text(state.candidate!, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                      const Text(
+                        '클립보드 링크 감지',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        state.candidate!,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12),
+                      ),
                     ],
                   ),
                 ),
                 TextButton(onPressed: c.saveCandidate, child: const Text('저장')),
-                IconButton(onPressed: c.dismissCandidate, icon: const Icon(Icons.close, size: 18)),
+                IconButton(
+                  onPressed: c.dismissCandidate,
+                  icon: const Icon(Icons.close, size: 18),
+                ),
               ],
             ),
           ),
@@ -3339,13 +4114,29 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
           child: Row(
             children: [
-              ChoiceChip(label: const Text('전체'), selected: state.filter == InboxFilter.all, onSelected: (_) => c.setFilter(InboxFilter.all)),
+              ChoiceChip(
+                label: const Text('전체'),
+                selected: state.filter == InboxFilter.all,
+                onSelected: (_) => c.setFilter(InboxFilter.all),
+              ),
               const SizedBox(width: 8),
-              ChoiceChip(label: const Text('읽지 않음'), selected: state.filter == InboxFilter.unread, onSelected: (_) => c.setFilter(InboxFilter.unread)),
+              ChoiceChip(
+                label: const Text('읽지 않음'),
+                selected: state.filter == InboxFilter.unread,
+                onSelected: (_) => c.setFilter(InboxFilter.unread),
+              ),
               const SizedBox(width: 8),
-              ChoiceChip(label: const Text('즐겨찾기'), selected: state.filter == InboxFilter.starred, onSelected: (_) => c.setFilter(InboxFilter.starred)),
+              ChoiceChip(
+                label: const Text('즐겨찾기'),
+                selected: state.filter == InboxFilter.starred,
+                onSelected: (_) => c.setFilter(InboxFilter.starred),
+              ),
               const SizedBox(width: 8),
-              ChoiceChip(label: const Text('오늘'), selected: state.filter == InboxFilter.today, onSelected: (_) => c.setFilter(InboxFilter.today)),
+              ChoiceChip(
+                label: const Text('오늘'),
+                selected: state.filter == InboxFilter.today,
+                onSelected: (_) => c.setFilter(InboxFilter.today),
+              ),
             ],
           ),
         ),
@@ -3355,11 +4146,25 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[300]),
+                      Icon(
+                        Icons.inbox_outlined,
+                        size: 64,
+                        color: Colors.grey[300],
+                      ),
                       const SizedBox(height: 16),
-                      Text('인박스가 비어 있습니다', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey[800])),
+                      Text(
+                        '인박스가 비어 있습니다',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey[800],
+                        ),
+                      ),
                       const SizedBox(height: 8),
-                      Text('영감을 주는 링크를 저장해 보세요!', style: TextStyle(color: Colors.grey[600])),
+                      Text(
+                        '영감을 주는 링크를 저장해 보세요!',
+                        style: TextStyle(color: Colors.grey[600]),
+                      ),
                       const SizedBox(height: 24),
                       FilledButton.icon(
                         onPressed: () => _showSaveSheet(context, c),
@@ -3377,15 +4182,35 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                     if (row is String) {
                       return Padding(
                         padding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-                        child: Text(row, style: const TextStyle(color: Color(0xFF6B7684), fontWeight: FontWeight.bold, fontSize: 14)),
+                        child: Text(
+                          row,
+                          style: const TextStyle(
+                            color: Color(0xFF6B7684),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
                       );
                     }
                     final item = row as LinkItem;
                     final thumbUrl = _inboxThumbUrl(item);
                     return Dismissible(
                       key: ValueKey(item.id),
-                      background: Container(color: Colors.blue, alignment: Alignment.centerLeft, padding: const EdgeInsets.only(left: 24), child: const Icon(Icons.check, color: Colors.white)),
-                      secondaryBackground: Container(color: Colors.grey, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 24), child: const Icon(Icons.archive_outlined, color: Colors.white)),
+                      background: Container(
+                        color: Colors.blue,
+                        alignment: Alignment.centerLeft,
+                        padding: const EdgeInsets.only(left: 24),
+                        child: const Icon(Icons.check, color: Colors.white),
+                      ),
+                      secondaryBackground: Container(
+                        color: Colors.grey,
+                        alignment: Alignment.centerRight,
+                        padding: const EdgeInsets.only(right: 24),
+                        child: const Icon(
+                          Icons.archive_outlined,
+                          color: Colors.white,
+                        ),
+                      ),
                       confirmDismiss: (d) async {
                         if (d == DismissDirection.startToEnd) {
                           await c.toggleRead(item);
@@ -3397,10 +4222,21 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                       child: InkWell(
                         onTap: () => context.push('/detail/${item.id}'),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 16,
+                          ),
                           decoration: BoxDecoration(
-                            color: item.isRead ? Colors.transparent : Theme.of(context).cardColor,
-                            border: Border(bottom: BorderSide(color: Theme.of(context).dividerColor.withValues(alpha: 0.5))),
+                            color: item.isRead
+                                ? Colors.transparent
+                                : Theme.of(context).cardColor,
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Theme.of(
+                                  context,
+                                ).dividerColor.withValues(alpha: 0.5),
+                              ),
+                            ),
                           ),
                           child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -3411,10 +4247,26 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                                 decoration: BoxDecoration(
                                   color: Colors.grey[100],
                                   borderRadius: BorderRadius.circular(12),
-                                  image: thumbUrl != null ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover) : null,
+                                  image: thumbUrl != null
+                                      ? DecorationImage(
+                                          image: NetworkImage(thumbUrl),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
                                 ),
                                 child: thumbUrl == null
-                                    ? Center(child: Text(item.domain.isEmpty ? '?' : item.domain[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.grey)))
+                                    ? Center(
+                                        child: Text(
+                                          item.domain.isEmpty
+                                              ? '?'
+                                              : item.domain[0].toUpperCase(),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 18,
+                                            color: Colors.grey,
+                                          ),
+                                        ),
+                                      )
                                     : null,
                               ),
                               const SizedBox(width: 16),
@@ -3427,32 +4279,49 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        fontWeight: item.isRead ? FontWeight.normal : FontWeight.bold,
+                                        fontWeight: item.isRead
+                                            ? FontWeight.normal
+                                            : FontWeight.bold,
                                         fontSize: 16,
-                                        color: item.isRead ? const Color(0xFF8B95A1) : Theme.of(context).colorScheme.onSurface,
+                                        color: item.isRead
+                                            ? const Color(0xFF8B95A1)
+                                            : Theme.of(
+                                                context,
+                                              ).colorScheme.onSurface,
                                         height: 1.3,
                                       ),
                                     ),
-                                    if (item.description.isNotEmpty && !item.isRead) ...[
+                                    if (item.description.isNotEmpty &&
+                                        !item.isRead) ...[
                                       const SizedBox(height: 4),
                                       Text(
                                         item.description,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(fontSize: 13, color: Color(0xFF8B95A1)),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF8B95A1),
+                                        ),
                                       ),
                                     ],
                                     const SizedBox(height: 6),
                                     Row(
                                       children: [
                                         if (item.isStarred) ...[
-                                          const Icon(Icons.star_rounded, size: 14, color: Colors.amber),
+                                          const Icon(
+                                            Icons.star_rounded,
+                                            size: 14,
+                                            color: Colors.amber,
+                                          ),
                                           const SizedBox(width: 4),
                                         ],
                                         Expanded(
                                           child: Text(
                                             '${item.domain} · ${_friendly(item.createdAt)}${item.folderId != null ? ' · ${state.folders.where((f) => f.id == item.folderId).firstOrNull?.name ?? ''}' : ''}',
-                                            style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF8B95A1),
+                                            ),
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                           ),
@@ -3466,8 +4335,12 @@ class _InboxPageState extends ConsumerState<InboxPage> with WidgetsBindingObserv
                               IconButton(
                                 visualDensity: VisualDensity.compact,
                                 icon: Icon(
-                                  item.isStarred ? Icons.star_rounded : Icons.star_border_rounded,
-                                  color: item.isStarred ? Colors.amber : const Color(0xFF9AA4AF),
+                                  item.isStarred
+                                      ? Icons.star_rounded
+                                      : Icons.star_border_rounded,
+                                  color: item.isStarred
+                                      ? Colors.amber
+                                      : const Color(0xFF9AA4AF),
                                 ),
                                 onPressed: () => c.toggleStar(item),
                               ),
@@ -3530,9 +4403,15 @@ class SearchPage extends ConsumerWidget {
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search),
               hintText: '제목, 도메인, 태그 검색',
-              border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(16)), borderSide: BorderSide.none),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.all(Radius.circular(16)),
+                borderSide: BorderSide.none,
+              ),
               filled: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -3542,14 +4421,34 @@ class SearchPage extends ConsumerWidget {
               children: [
                 _FilterDropdown<String?>(
                   value: state.searchDomain,
-                  items: [const DropdownMenuItem<String?>(value: null, child: Text('도메인 전체')), ...domains.map((e) => DropdownMenuItem<String?>(value: e, child: Text(e)))],
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('도메인 전체'),
+                    ),
+                    ...domains.map(
+                      (e) =>
+                          DropdownMenuItem<String?>(value: e, child: Text(e)),
+                    ),
+                  ],
                   onChanged: c.setSearchDomain,
                   hint: '도메인',
                 ),
                 const SizedBox(width: 8),
                 _FilterDropdown<String?>(
                   value: state.searchTag,
-                  items: [const DropdownMenuItem<String?>(value: null, child: Text('태그 전체')), ...state.tags.map((e) => DropdownMenuItem<String?>(value: e.name, child: Text(e.name)))],
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('태그 전체'),
+                    ),
+                    ...state.tags.map(
+                      (e) => DropdownMenuItem<String?>(
+                        value: e.name,
+                        child: Text(e.name),
+                      ),
+                    ),
+                  ],
                   onChanged: c.setSearchTag,
                   hint: '태그',
                 ),
@@ -3557,10 +4456,22 @@ class SearchPage extends ConsumerWidget {
                 _FilterDropdown<SearchPeriod>(
                   value: state.period,
                   items: const [
-                    DropdownMenuItem(value: SearchPeriod.all, child: Text('기간 전체')),
-                    DropdownMenuItem(value: SearchPeriod.day, child: Text('1일 이내')),
-                    DropdownMenuItem(value: SearchPeriod.week, child: Text('1주 이내')),
-                    DropdownMenuItem(value: SearchPeriod.month, child: Text('1개월 이내')),
+                    DropdownMenuItem(
+                      value: SearchPeriod.all,
+                      child: Text('기간 전체'),
+                    ),
+                    DropdownMenuItem(
+                      value: SearchPeriod.day,
+                      child: Text('1일 이내'),
+                    ),
+                    DropdownMenuItem(
+                      value: SearchPeriod.week,
+                      child: Text('1주 이내'),
+                    ),
+                    DropdownMenuItem(
+                      value: SearchPeriod.month,
+                      child: Text('1개월 이내'),
+                    ),
                   ],
                   onChanged: (v) {
                     if (v != null) c.setPeriod(v);
@@ -3577,9 +4488,16 @@ class SearchPage extends ConsumerWidget {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.search_off, size: 64, color: Colors.grey.withValues(alpha: 0.5)),
+                        Icon(
+                          Icons.search_off,
+                          size: 64,
+                          color: Colors.grey.withValues(alpha: 0.5),
+                        ),
                         const SizedBox(height: 16),
-                        const Text('검색 결과가 없습니다.', style: TextStyle(color: Colors.grey, fontSize: 16)),
+                        const Text(
+                          '검색 결과가 없습니다.',
+                          style: TextStyle(color: Colors.grey, fontSize: 16),
+                        ),
                       ],
                     ),
                   )
@@ -3590,24 +4508,45 @@ class SearchPage extends ConsumerWidget {
                       final item = result[i];
                       final thumbUrl = _inboxThumbUrl(item);
                       return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 8,
+                        ),
                         leading: Container(
                           width: 40,
                           height: 40,
                           decoration: BoxDecoration(
                             color: Colors.grey[100],
                             borderRadius: BorderRadius.circular(10),
-                            image: thumbUrl != null ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover) : null,
+                            image: thumbUrl != null
+                                ? DecorationImage(
+                                    image: NetworkImage(thumbUrl),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
                           ),
                           child: thumbUrl == null
-                              ? Center(child: Text(item.domain.isEmpty ? '?' : item.domain[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))
+                              ? Center(
+                                  child: Text(
+                                    item.domain.isEmpty
+                                        ? '?'
+                                        : item.domain[0].toUpperCase(),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                )
                               : null,
                         ),
                         title: Text(
                           _dashboardTitle(item),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
                         ),
                         subtitle: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -3617,12 +4556,18 @@ class SearchPage extends ConsumerWidget {
                                 item.description,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 13, color: Color(0xFF8B95A1)),
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF8B95A1),
+                                ),
                               ),
                             const SizedBox(height: 4),
                             Text(
                               '${item.domain} · ${_friendly(item.createdAt)}',
-                              style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF8B95A1),
+                              ),
                             ),
                           ],
                         ),
@@ -3638,7 +4583,12 @@ class SearchPage extends ConsumerWidget {
 }
 
 class _FilterDropdown<T> extends StatelessWidget {
-  const _FilterDropdown({required this.value, required this.items, required this.onChanged, required this.hint});
+  const _FilterDropdown({
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    required this.hint,
+  });
   final T value;
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?> onChanged;
@@ -3659,7 +4609,10 @@ class _FilterDropdown<T> extends StatelessWidget {
           items: items,
           onChanged: onChanged,
           hint: Text(hint),
-          style: TextStyle(fontSize: 13, color: Theme.of(context).textTheme.bodyMedium?.color),
+          style: TextStyle(
+            fontSize: 13,
+            color: Theme.of(context).textTheme.bodyMedium?.color,
+          ),
           icon: const Icon(Icons.arrow_drop_down, size: 20),
           isDense: true,
         ),
@@ -3677,51 +4630,92 @@ class CollectionPage extends ConsumerWidget {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
-        _SectionHeader(title: '폴더', onAdd: () => _showNameDialog(context, '폴더 추가', c.createFolder)),
+        _SectionHeader(
+          title: '폴더',
+          onAdd: () => _showNameDialog(context, '폴더 추가', c.createFolder),
+        ),
         if (state.folders.isEmpty)
-          const Padding(padding: EdgeInsets.all(16), child: Text('폴더가 없습니다.', style: TextStyle(color: Colors.grey))),
-        ...state.folders.map((f) => ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: Colors.blue.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.folder_rounded, color: Colors.blue),
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('폴더가 없습니다.', style: TextStyle(color: Colors.grey)),
+          ),
+        ...state.folders.map(
+          (f) => ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.blue.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-              title: Text(f.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(12)),
-                    child: Text('${state.links.where((e) => e.folderId == f.id).length}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+              child: const Icon(Icons.folder_rounded, color: Colors.blue),
+            ),
+            title: Text(
+              f.name,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            trailing: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
                   ),
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: Colors.grey),
-                    onPressed: () async {
-                      final confirmed = await _showConfirmDialog(context, '폴더 삭제', '이 폴더를 삭제하시겠습니까? 폴더 안의 링크는 삭제되지 않습니다.');
-                      if (confirmed) await c.removeFolder(f.id);
-                    },
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
-                ],
-              ),
-              onTap: () => context.push('/folder/${f.id}'),
-            )),
+                  child: Text(
+                    '${state.links.where((e) => e.folderId == f.id).length}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(
+                    Icons.delete_outline,
+                    size: 20,
+                    color: Colors.grey,
+                  ),
+                  onPressed: () async {
+                    final confirmed = await _showConfirmDialog(
+                      context,
+                      '폴더 삭제',
+                      '이 폴더를 삭제하시겠습니까? 폴더 안의 링크는 삭제되지 않습니다.',
+                    );
+                    if (confirmed) await c.removeFolder(f.id);
+                  },
+                ),
+                const Icon(Icons.chevron_right, size: 20, color: Colors.grey),
+              ],
+            ),
+            onTap: () => context.push('/folder/${f.id}'),
+          ),
+        ),
         const SizedBox(height: 24),
-        _SectionHeader(title: '태그', onAdd: () => _showNameDialog(context, '태그 추가', c.createTag)),
+        _SectionHeader(
+          title: '태그',
+          onAdd: () => _showNameDialog(context, '태그 추가', c.createTag),
+        ),
         if (state.tags.isEmpty)
-          const Padding(padding: EdgeInsets.all(16), child: Text('태그가 없습니다.', style: TextStyle(color: Colors.grey))),
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('태그가 없습니다.', style: TextStyle(color: Colors.grey)),
+          ),
         Wrap(
           spacing: 8,
           runSpacing: 8,
           children: state.tags.map((t) {
-            final count = state.links.where((e) => e.tags.contains(t.name)).length;
+            final count = state.links
+                .where((e) => e.tags.contains(t.name))
+                .length;
             return Chip(
               label: Text('#${t.name} ($count)'),
               backgroundColor: Theme.of(context).cardColor,
               side: BorderSide(color: Theme.of(context).dividerColor),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
             );
           }).toList(),
         ),
@@ -3740,7 +4734,10 @@ class _SectionHeader extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
         TextButton.icon(
           onPressed: onAdd,
           icon: const Icon(Icons.add, size: 18),
@@ -3763,7 +4760,10 @@ class SettingsPage extends ConsumerWidget {
       children: [
         const Padding(
           padding: EdgeInsets.only(left: 8, bottom: 8),
-          child: Text('화면 설정', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          child: Text(
+            '화면 설정',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+          ),
         ),
         Container(
           decoration: BoxDecoration(
@@ -3777,16 +4777,29 @@ class SettingsPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('테마 모드', style: TextStyle(fontWeight: FontWeight.w600)),
+                    const Text(
+                      '테마 모드',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,
                       child: SegmentedButton<ThemeMode>(
                         segments: const [
-                          ButtonSegment<ThemeMode>(value: ThemeMode.light, label: Text('라이트')),
-                          ButtonSegment<ThemeMode>(value: ThemeMode.dark, label: Text('다크')),
+                          ButtonSegment<ThemeMode>(
+                            value: ThemeMode.light,
+                            label: Text('라이트'),
+                          ),
+                          ButtonSegment<ThemeMode>(
+                            value: ThemeMode.dark,
+                            label: Text('다크'),
+                          ),
                         ],
-                        selected: <ThemeMode>{state.themeMode == ThemeMode.dark ? ThemeMode.dark : ThemeMode.light},
+                        selected: <ThemeMode>{
+                          state.themeMode == ThemeMode.dark
+                              ? ThemeMode.dark
+                              : ThemeMode.light,
+                        },
                         onSelectionChanged: (values) {
                           if (values.isNotEmpty) c.setThemeMode(values.first);
                         },
@@ -3794,7 +4807,11 @@ class SettingsPage extends ConsumerWidget {
                         style: ButtonStyle(
                           visualDensity: VisualDensity.compact,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          shape: WidgetStateProperty.all(RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+                          shape: WidgetStateProperty.all(
+                            RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -3807,7 +4824,10 @@ class SettingsPage extends ConsumerWidget {
         const SizedBox(height: 24),
         const Padding(
           padding: EdgeInsets.only(left: 8, bottom: 8),
-          child: Text('기능 설정', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          child: Text(
+            '기능 설정',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+          ),
         ),
         Container(
           decoration: BoxDecoration(
@@ -3837,7 +4857,10 @@ class SettingsPage extends ConsumerWidget {
         const SizedBox(height: 24),
         const Padding(
           padding: EdgeInsets.only(left: 8, bottom: 8),
-          child: Text('로그인 / 동기화', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)),
+          child: Text(
+            '로그인 / 동기화',
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.grey),
+          ),
         ),
         Container(
           decoration: BoxDecoration(
@@ -3850,15 +4873,29 @@ class SettingsPage extends ConsumerWidget {
                 const ListTile(
                   leading: Icon(Icons.cloud_off_outlined),
                   title: Text('클라우드 비활성화'),
-                  subtitle: Text('SUPABASE_URL / SUPABASE_ANON_KEY가 설정되지 않았습니다.'),
+                  subtitle: Text(
+                    'SUPABASE_URL / SUPABASE_ANON_KEY가 설정되지 않았습니다.',
+                  ),
                 )
               else ...[
                 ListTile(
-                  leading: Icon(state.signedIn ? Icons.verified_user_outlined : Icons.person_outline),
-                  title: Text(state.signedIn ? (state.userEmail ?? '로그인됨') : '로그인'),
-                  subtitle: Text(state.syncing ? '동기화 중...' : '앱과 웹에서 같은 링크를 확인할 수 있습니다.'),
+                  leading: Icon(
+                    state.signedIn
+                        ? Icons.verified_user_outlined
+                        : Icons.person_outline,
+                  ),
+                  title: Text(
+                    state.signedIn ? (state.userEmail ?? '로그인됨') : '로그인',
+                  ),
+                  subtitle: Text(
+                    state.syncing ? '동기화 중...' : '앱과 웹에서 같은 링크를 확인할 수 있습니다.',
+                  ),
                   trailing: state.syncing
-                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
                       : null,
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
@@ -3872,13 +4909,20 @@ class SettingsPage extends ConsumerWidget {
                       if (input == null) return;
                       try {
                         final outcome = await _submitEmailAuth(c, input);
-                        if (outcome == _EmailAuthOutcome.signUpPendingVerification) {
+                        if (outcome ==
+                            _EmailAuthOutcome.signUpPendingVerification) {
                           if (!context.mounted) return;
-                          await _showAuthInfoDialog(context, '회원 가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.');
+                          await _showAuthInfoDialog(
+                            context,
+                            '회원 가입이 완료되었습니다. 이메일 인증 후 로그인해 주세요.',
+                          );
                         }
                       } catch (e) {
                         if (!context.mounted) return;
-                        await _showAuthErrorDialog(context, _friendlyAuthError(e));
+                        await _showAuthErrorDialog(
+                          context,
+                          _friendlyAuthError(e),
+                        );
                       }
                     },
                   ),
@@ -3924,7 +4968,11 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
   @override
   void initState() {
     super.initState();
-    final link = ref.read(appProvider).links.where((e) => e.id == widget.id).firstOrNull;
+    final link = ref
+        .read(appProvider)
+        .links
+        .where((e) => e.id == widget.id)
+        .firstOrNull;
     noteController = TextEditingController(text: link?.note ?? '');
 
     if (link != null && !link.isRead) {
@@ -3934,7 +4982,9 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     }
 
     if (link != null && _isXDomainForUi(link.domain)) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _loadXAssets(link.url));
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _loadXAssets(link.url),
+      );
     }
   }
 
@@ -3947,7 +4997,10 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     });
   }
 
-  List<Widget> _buildDetailMediaWidgets(BuildContext context, List<String> mediaUrls) {
+  List<Widget> _buildDetailMediaWidgets(
+    BuildContext context,
+    List<String> mediaUrls,
+  ) {
     if (mediaUrls.isEmpty) return const [];
     return [
       ...mediaUrls.take(4).map((mediaUrl) {
@@ -3964,7 +5017,8 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
                 child: FilledButton.icon(
                   onPressed: () async {
                     final u = Uri.tryParse(mediaUrl);
-                    if (u != null) await launchUrl(u, mode: LaunchMode.externalApplication);
+                    if (u != null)
+                      await launchUrl(u, mode: LaunchMode.externalApplication);
                   },
                   icon: const Icon(Icons.play_circle_fill_rounded),
                   label: const Text('동영상 열기'),
@@ -3979,7 +5033,13 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
           child: Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 10, offset: const Offset(0, 4))],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(20),
@@ -3988,7 +5048,11 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
                 height: 200,
                 width: double.infinity,
                 fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) => Container(height: 200, color: Colors.grey[200], child: const Icon(Icons.broken_image, color: Colors.grey)),
+                errorBuilder: (_, __, ___) => Container(
+                  height: 200,
+                  color: Colors.grey[200],
+                  child: const Icon(Icons.broken_image, color: Colors.grey),
+                ),
               ),
             ),
           ),
@@ -4012,12 +5076,26 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
     if (link == null) return const Scaffold(body: Center(child: Text('링크 없음')));
     final isXLink = _isXDomainForUi(link.domain);
     final isThreadsLink = _isThreadsDomainForUi(link.domain);
-    final threadsProfileImage = isThreadsLink ? _threadsProfileFromStored(link) : null;
-    final profileImageRaw = _firstHttpUrl([xProfileImageUrl, threadsProfileImage, if (!isThreadsLink) link.faviconUrl]);
-    final profileImageUrl = profileImageRaw == null ? null : _webImageUrlForUi(profileImageRaw);
+    final threadsProfileImage = isThreadsLink
+        ? _threadsProfileFromStored(link)
+        : null;
+    final profileImageRaw = _firstHttpUrl([
+      xProfileImageUrl,
+      threadsProfileImage,
+      if (!isThreadsLink) link.faviconUrl,
+    ]);
+    final profileImageUrl = profileImageRaw == null
+        ? null
+        : _webImageUrlForUi(profileImageRaw);
     final mediaUrls = isXLink
         ? _mergeMediaForUi(xMediaUrls)
-        : (isThreadsLink ? _mergeMediaForUi(link.mediaUrls, fallback: link.imageUrl, exclude: [threadsProfileImage]) : _mergeMediaForUi(const [], fallback: link.imageUrl));
+        : (isThreadsLink
+              ? _mergeMediaForUi(
+                  link.mediaUrls,
+                  fallback: link.imageUrl,
+                  exclude: [threadsProfileImage],
+                )
+              : _mergeMediaForUi(const [], fallback: link.imageUrl));
 
     return Scaffold(
       appBar: AppBar(
@@ -4025,13 +5103,20 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
         centerTitle: true,
         actions: [
           IconButton(
-            icon: Icon(link.isStarred ? Icons.star_rounded : Icons.star_outline_rounded, color: link.isStarred ? Colors.amber : null),
+            icon: Icon(
+              link.isStarred ? Icons.star_rounded : Icons.star_outline_rounded,
+              color: link.isStarred ? Colors.amber : null,
+            ),
             onPressed: () => c.toggleStar(link),
           ),
           IconButton(
             icon: const Icon(Icons.delete_outline_rounded),
             onPressed: () async {
-              final confirmed = await _showConfirmDialog(context, '링크 삭제', '이 링크를 삭제하시겠습니까?');
+              final confirmed = await _showConfirmDialog(
+                context,
+                '링크 삭제',
+                '이 링크를 삭제하시겠습니까?',
+              );
               if (confirmed) {
                 await c.remove(link);
                 if (context.mounted) context.pop();
@@ -4046,45 +5131,89 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
           if (isXLink && profileImageUrl != null) ...[
             Row(
               children: [
-                CircleAvatar(radius: 18, backgroundImage: NetworkImage(profileImageUrl)),
+                CircleAvatar(
+                  radius: 18,
+                  backgroundImage: NetworkImage(profileImageUrl),
+                ),
                 const SizedBox(width: 10),
-                const Text('작성자 프로필', style: TextStyle(fontSize: 13, color: Color(0xFF8B95A1), fontWeight: FontWeight.w600)),
+                const Text(
+                  '작성자 프로필',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Color(0xFF8B95A1),
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 14),
           ],
-          if (mediaUrls.isNotEmpty && !isThreadsLink) ..._buildDetailMediaWidgets(context, mediaUrls),
+          if (mediaUrls.isNotEmpty && !isThreadsLink)
+            ..._buildDetailMediaWidgets(context, mediaUrls),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: Text(link.title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, height: 1.3)),
+                child: Text(
+                  link.title,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    height: 1.3,
+                  ),
+                ),
               ),
               IconButton(
-                icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.grey),
+                icon: const Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: Colors.grey,
+                ),
                 onPressed: () async {
                   final controller = TextEditingController(text: link.title);
                   final result = await showDialog<String>(
                     context: context,
                     builder: (ctx) => AlertDialog(
                       title: const Text('제목 수정'),
-                      content: TextField(controller: controller, autofocus: true, decoration: const InputDecoration(hintText: '링크 제목')),
+                      content: TextField(
+                        controller: controller,
+                        autofocus: true,
+                        decoration: const InputDecoration(hintText: '링크 제목'),
+                      ),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('취소')),
-                        FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('저장')),
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text('취소'),
+                        ),
+                        FilledButton(
+                          onPressed: () => Navigator.pop(ctx, controller.text),
+                          child: const Text('저장'),
+                        ),
                       ],
                     ),
                   );
-                  if (result != null && result.trim().isNotEmpty && result != link.title) {
+                  if (result != null &&
+                      result.trim().isNotEmpty &&
+                      result != link.title) {
                     await c.updateDetail(link, title: result.trim());
-                    if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('제목이 수정되었습니다.')));
+                    if (context.mounted)
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('제목이 수정되었습니다.')),
+                      );
                   }
                 },
               ),
             ],
           ),
           const SizedBox(height: 8),
-          Text(link.domain, style: const TextStyle(fontSize: 14, color: Color(0xFF8B95A1), fontWeight: FontWeight.w500)),
+          Text(
+            link.domain,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Color(0xFF8B95A1),
+              fontWeight: FontWeight.w500,
+            ),
+          ),
           if (link.description.isNotEmpty) ...[
             const SizedBox(height: 12),
             Text(
@@ -4098,7 +5227,10 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
           ],
           if (isThreadsLink && mediaUrls.isNotEmpty) ...[
             const SizedBox(height: 16),
-            const Text('본문 미디어', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+            const Text(
+              '본문 미디어',
+              style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+            ),
             const SizedBox(height: 10),
             ..._buildDetailMediaWidgets(context, mediaUrls),
           ],
@@ -4107,13 +5239,17 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
             onPressed: () => c.openOriginal(link),
             icon: const Icon(Icons.open_in_new_rounded),
             label: const Text('원문 열기'),
-            style: FilledButton.styleFrom(minimumSize: const Size(double.infinity, 56)),
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(double.infinity, 56),
+            ),
           ),
           const SizedBox(height: 24),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+              color: Theme.of(
+                context,
+              ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(20),
             ),
             child: Column(
@@ -4121,9 +5257,19 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
               children: [
                 Row(
                   children: [
-                    Icon(Icons.edit_note_rounded, size: 20, color: Theme.of(context).colorScheme.primary),
+                    Icon(
+                      Icons.edit_note_rounded,
+                      size: 20,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     const SizedBox(width: 8),
-                    const Text('메모', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    const Text(
+                      '메모',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -4132,7 +5278,10 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
                   maxLines: 3,
                   decoration: InputDecoration(
                     hintText: '이 링크를 저장한 이유나 기억할 내용을 적어보세요.',
-                    hintStyle: TextStyle(fontSize: 14, color: Colors.grey.withValues(alpha: 0.7)),
+                    hintStyle: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey.withValues(alpha: 0.7),
+                    ),
                     border: InputBorder.none,
                     enabledBorder: InputBorder.none,
                     focusedBorder: InputBorder.none,
@@ -4147,32 +5296,58 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
                   child: TextButton.icon(
                     onPressed: () async {
                       await c.updateDetail(link, note: noteController.text);
-                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('메모가 저장되었습니다.')));
+                      if (context.mounted)
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('메모가 저장되었습니다.')),
+                        );
                     },
                     icon: const Icon(Icons.check_rounded, size: 18),
                     label: const Text('저장'),
-                    style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 24),
-          const Text('분류', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text(
+            '분류',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: DropdownButtonFormField<String?>(
                   initialValue: link.folderId,
-                  items: [const DropdownMenuItem<String?>(value: null, child: Text('폴더 없음')), ...state.folders.map((e) => DropdownMenuItem<String?>(value: e.id, child: Text(e.name)))],
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('폴더 없음'),
+                    ),
+                    ...state.folders.map(
+                      (e) => DropdownMenuItem<String?>(
+                        value: e.id,
+                        child: Text(e.name),
+                      ),
+                    ),
+                  ],
                   onChanged: (v) => c.updateDetail(link, folderId: v),
-                  decoration: const InputDecoration(labelText: '폴더 선택', contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
+                  decoration: const InputDecoration(
+                    labelText: '폴더 선택',
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               IconButton.filledTonal(
-                onPressed: () => _showNameDialog(context, '폴더 추가', c.createFolder),
+                onPressed: () =>
+                    _showNameDialog(context, '폴더 추가', c.createFolder),
                 icon: const Icon(Icons.create_new_folder_outlined),
                 tooltip: '새 폴더',
               ),
@@ -4183,35 +5358,48 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              ...state.tags.map((tag) => FilterChip(
-                    label: Text('#${tag.name}'),
-                    selected: link.tags.contains(tag.name),
-                    onSelected: (v) {
-                      final next = [...link.tags];
-                      if (v) {
-                        if (!next.contains(tag.name)) next.add(tag.name);
-                      } else {
-                        next.remove(tag.name);
-                      }
-                      c.updateDetail(link, tags: next);
-                    },
-                    showCheckmark: false,
-                    selectedColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                    labelStyle: TextStyle(
-                      color: link.tags.contains(tag.name) ? Theme.of(context).colorScheme.primary : const Color(0xFF4E5968),
-                      fontWeight: link.tags.contains(tag.name) ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                      side: link.tags.contains(tag.name) ? BorderSide.none : BorderSide(color: Theme.of(context).dividerColor),
-                    ),
-                    backgroundColor: Theme.of(context).cardColor,
-                  )),
+              ...state.tags.map(
+                (tag) => FilterChip(
+                  label: Text('#${tag.name}'),
+                  selected: link.tags.contains(tag.name),
+                  onSelected: (v) {
+                    final next = [...link.tags];
+                    if (v) {
+                      if (!next.contains(tag.name)) next.add(tag.name);
+                    } else {
+                      next.remove(tag.name);
+                    }
+                    c.updateDetail(link, tags: next);
+                  },
+                  showCheckmark: false,
+                  selectedColor: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: 0.1),
+                  labelStyle: TextStyle(
+                    color: link.tags.contains(tag.name)
+                        ? Theme.of(context).colorScheme.primary
+                        : const Color(0xFF4E5968),
+                    fontWeight: link.tags.contains(tag.name)
+                        ? FontWeight.bold
+                        : FontWeight.normal,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: link.tags.contains(tag.name)
+                        ? BorderSide.none
+                        : BorderSide(color: Theme.of(context).dividerColor),
+                  ),
+                  backgroundColor: Theme.of(context).cardColor,
+                ),
+              ),
               ActionChip(
                 label: const Text('+ 태그'),
                 onPressed: () => _showNameDialog(context, '태그 추가', c.createTag),
                 avatar: const Icon(Icons.add, size: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Theme.of(context).dividerColor)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: Theme.of(context).dividerColor),
+                ),
                 backgroundColor: Theme.of(context).cardColor,
               ),
             ],
@@ -4219,10 +5407,19 @@ class _LinkDetailPageState extends ConsumerState<LinkDetailPage> {
           const SizedBox(height: 32),
           Divider(color: Theme.of(context).dividerColor),
           const SizedBox(height: 16),
-          Text('저장: ${DateFormat('yyyy-MM-dd HH:mm').format(link.createdAt)}', style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
-          Text('수정: ${DateFormat('yyyy-MM-dd HH:mm').format(link.updatedAt)}', style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
+          Text(
+            '저장: ${DateFormat('yyyy-MM-dd HH:mm').format(link.createdAt)}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
+          ),
+          Text(
+            '수정: ${DateFormat('yyyy-MM-dd HH:mm').format(link.updatedAt)}',
+            style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
+          ),
           if (link.lastOpenedAt != null)
-            Text('열람: ${DateFormat('yyyy-MM-dd HH:mm').format(link.lastOpenedAt!)}', style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
+            Text(
+              '열람: ${DateFormat('yyyy-MM-dd HH:mm').format(link.lastOpenedAt!)}',
+              style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
+            ),
           const SizedBox(height: 40),
         ],
       ),
@@ -4246,7 +5443,10 @@ Future<void> _showAuthErrorDialog(BuildContext context, String message) async {
       title: const Text('로그인 오류'),
       content: Text(message),
       actions: [
-        FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인')),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('확인'),
+        ),
       ],
     ),
   );
@@ -4260,7 +5460,10 @@ Future<void> _showAuthInfoDialog(BuildContext context, String message) async {
       title: const Text('안내'),
       content: Text(message),
       actions: [
-        FilledButton(onPressed: () => Navigator.pop(ctx), child: const Text('확인')),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('확인'),
+        ),
       ],
     ),
   );
@@ -4276,7 +5479,11 @@ String _friendlyAuthError(Object error) {
 enum _EmailAuthMode { signIn, signUp }
 
 class _EmailAuthInput {
-  const _EmailAuthInput({required this.email, required this.password, required this.mode});
+  const _EmailAuthInput({
+    required this.email,
+    required this.password,
+    required this.mode,
+  });
 
   final String email;
   final String password;
@@ -4285,10 +5492,18 @@ class _EmailAuthInput {
 
 enum _EmailAuthOutcome { signedIn, signUpPendingVerification }
 
-Future<_EmailAuthOutcome> _submitEmailAuth(AppController controller, _EmailAuthInput input) async {
+Future<_EmailAuthOutcome> _submitEmailAuth(
+  AppController controller,
+  _EmailAuthInput input,
+) async {
   if (input.mode == _EmailAuthMode.signUp) {
-    final signedIn = await controller.signUpWithEmail(input.email, input.password);
-    return signedIn ? _EmailAuthOutcome.signedIn : _EmailAuthOutcome.signUpPendingVerification;
+    final signedIn = await controller.signUpWithEmail(
+      input.email,
+      input.password,
+    );
+    return signedIn
+        ? _EmailAuthOutcome.signedIn
+        : _EmailAuthOutcome.signUpPendingVerification;
   }
   await controller.signInWithEmail(input.email, input.password);
   return _EmailAuthOutcome.signedIn;
@@ -4344,8 +5559,14 @@ class _EmailAuthDialogState extends State<_EmailAuthDialog> {
         children: [
           SegmentedButton<_EmailAuthMode>(
             segments: const [
-              ButtonSegment<_EmailAuthMode>(value: _EmailAuthMode.signIn, label: Text('로그인')),
-              ButtonSegment<_EmailAuthMode>(value: _EmailAuthMode.signUp, label: Text('회원가입')),
+              ButtonSegment<_EmailAuthMode>(
+                value: _EmailAuthMode.signIn,
+                label: Text('로그인'),
+              ),
+              ButtonSegment<_EmailAuthMode>(
+                value: _EmailAuthMode.signUp,
+                label: Text('회원가입'),
+              ),
             ],
             selected: <_EmailAuthMode>{_mode},
             onSelectionChanged: (values) {
@@ -4369,18 +5590,27 @@ class _EmailAuthDialogState extends State<_EmailAuthDialog> {
           ),
           if (isSignUp) ...[
             const SizedBox(height: 8),
-            const Text('회원가입 후 인증 메일 확인이 필요할 수 있습니다.', style: TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
+            const Text(
+              '회원가입 후 인증 메일 확인이 필요할 수 있습니다.',
+              style: TextStyle(fontSize: 12, color: Color(0xFF8B95A1)),
+            ),
           ],
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('취소'),
+        ),
         FilledButton(
           onPressed: () {
             final email = _emailController.text.trim();
             final password = _passwordController.text;
             if (email.isEmpty || password.isEmpty) return;
-            Navigator.pop(context, _EmailAuthInput(email: email, password: password, mode: _mode));
+            Navigator.pop(
+              context,
+              _EmailAuthInput(email: email, password: password, mode: _mode),
+            );
           },
           child: Text(isSignUp ? '회원가입' : '로그인'),
         ),
@@ -4421,15 +5651,29 @@ class _ManualSaveSheetState extends State<_ManualSaveSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 16, 16, MediaQuery.of(context).viewInsets.bottom + 16),
+      padding: EdgeInsets.fromLTRB(
+        16,
+        16,
+        16,
+        MediaQuery.of(context).viewInsets.bottom + 16,
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          TextField(controller: url, decoration: const InputDecoration(labelText: 'URL')),
+          TextField(
+            controller: url,
+            decoration: const InputDecoration(labelText: 'URL'),
+          ),
           const SizedBox(height: 8),
-          TextField(controller: title, decoration: const InputDecoration(labelText: '제목(선택)')),
+          TextField(
+            controller: title,
+            decoration: const InputDecoration(labelText: '제목(선택)'),
+          ),
           const SizedBox(height: 8),
-          TextField(controller: note, decoration: const InputDecoration(labelText: '메모(선택)')),
+          TextField(
+            controller: note,
+            decoration: const InputDecoration(labelText: '메모(선택)'),
+          ),
           const SizedBox(height: 8),
           SizedBox(
             width: double.infinity,
@@ -4446,14 +5690,18 @@ class _ManualSaveSheetState extends State<_ManualSaveSheet> {
               },
               child: const Text('저장'),
             ),
-          )
+          ),
         ],
       ),
     );
   }
 }
 
-Future<void> _showNameDialog(BuildContext context, String title, Future<void> Function(String) submit) async {
+Future<void> _showNameDialog(
+  BuildContext context,
+  String title,
+  Future<void> Function(String) submit,
+) async {
   await showDialog<void>(
     context: context,
     builder: (context) => _NameInputDialog(title: title, submit: submit),
@@ -4490,7 +5738,10 @@ class _NameInputDialogState extends State<_NameInputDialog> {
       title: Text(widget.title),
       content: TextField(controller: controller, autofocus: true),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('취소'),
+        ),
         FilledButton(
           onPressed: () async {
             await widget.submit(controller.text);
@@ -4504,15 +5755,25 @@ class _NameInputDialogState extends State<_NameInputDialog> {
   }
 }
 
-Future<bool> _showConfirmDialog(BuildContext context, String title, String content) async {
+Future<bool> _showConfirmDialog(
+  BuildContext context,
+  String title,
+  String content,
+) async {
   return await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
           title: Text(title),
           content: Text(content),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('취소')),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('삭제')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('취소'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('삭제'),
+            ),
           ],
         ),
       ) ??
@@ -4527,9 +5788,11 @@ class FolderLinksPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(appProvider);
     final folder = state.folders.where((e) => e.id == id).firstOrNull;
-    if (folder == null) return const Scaffold(body: Center(child: Text('폴더를 찾을 수 없습니다.')));
+    if (folder == null)
+      return const Scaffold(body: Center(child: Text('폴더를 찾을 수 없습니다.')));
 
-    final items = state.links.where((e) => e.folderId == id).toList()..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
+    final items = state.links.where((e) => e.folderId == id).toList()
+      ..sort((a, b) => b.sharedAt.compareTo(a.sharedAt));
 
     return Scaffold(
       appBar: AppBar(title: Text('${folder.name} (${items.length})')),
@@ -4542,28 +5805,57 @@ class FolderLinksPage extends ConsumerWidget {
                 final item = items[i];
                 final thumbUrl = _inboxThumbUrl(item);
                 return ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
                   leading: Container(
                     width: 40,
                     height: 40,
                     decoration: BoxDecoration(
                       color: Colors.grey[100],
                       borderRadius: BorderRadius.circular(10),
-                      image: thumbUrl != null ? DecorationImage(image: NetworkImage(thumbUrl), fit: BoxFit.cover) : null,
+                      image: thumbUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(thumbUrl),
+                              fit: BoxFit.cover,
+                            )
+                          : null,
                     ),
                     child: thumbUrl == null
-                        ? Center(child: Text(item.domain.isEmpty ? '?' : item.domain[0].toUpperCase(), style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.grey)))
+                        ? Center(
+                            child: Text(
+                              item.domain.isEmpty
+                                  ? '?'
+                                  : item.domain[0].toUpperCase(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          )
                         : null,
                   ),
                   title: Text(
                     _dashboardTitle(item),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(height: 1.2, fontSize: 15, fontWeight: FontWeight.bold, color: item.isRead ? Colors.grey : null),
+                    style: TextStyle(
+                      height: 1.2,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: item.isRead ? Colors.grey : null,
+                    ),
                   ),
                   subtitle: Padding(
                     padding: const EdgeInsets.only(top: 4),
-                    child: Text('${item.domain} · ${_friendly(item.createdAt)}', style: const TextStyle(fontSize: 12, color: Color(0xFF8B95A1))),
+                    child: Text(
+                      '${item.domain} · ${_friendly(item.createdAt)}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF8B95A1),
+                      ),
+                    ),
                   ),
                   onTap: () => context.push('/detail/${item.id}'),
                 );
@@ -4575,7 +5867,9 @@ class FolderLinksPage extends ConsumerWidget {
 
 bool _isUrl(String value) {
   final uri = Uri.tryParse(value.trim());
-  return uri != null && (uri.scheme == 'http' || uri.scheme == 'https') && uri.host.isNotEmpty;
+  return uri != null &&
+      (uri.scheme == 'http' || uri.scheme == 'https') &&
+      uri.host.isNotEmpty;
 }
 
 String _sanitizeIncomingUrl(String value) {
@@ -4601,11 +5895,15 @@ String _unwrapSocialRedirectUrl(String value) {
   final host = uri.host.toLowerCase();
   String? target;
 
-  if ((host == 'l.instagram.com' || host.endsWith('.l.instagram.com')) && uri.queryParameters.containsKey('u')) {
+  if ((host == 'l.instagram.com' || host.endsWith('.l.instagram.com')) &&
+      uri.queryParameters.containsKey('u')) {
     target = uri.queryParameters['u'];
   }
 
-  if ((host == 'l.facebook.com' || host == 'lm.facebook.com' || host.endsWith('.facebook.com')) && uri.path.toLowerCase() == '/l.php') {
+  if ((host == 'l.facebook.com' ||
+          host == 'lm.facebook.com' ||
+          host.endsWith('.facebook.com')) &&
+      uri.path.toLowerCase() == '/l.php') {
     target ??= uri.queryParameters['u'];
     target ??= uri.queryParameters['href'];
   }
@@ -4636,7 +5934,9 @@ bool _isAuthCallbackUrl(String value) {
   final uri = Uri.tryParse(raw);
   if (uri == null) return false;
   if (uri.scheme == 'urlinbox' && uri.host == 'login-callback') return true;
-  if (uri.path.contains('/auth/v1/callback') && uri.queryParameters.containsKey('code')) return true;
+  if (uri.path.contains('/auth/v1/callback') &&
+      uri.queryParameters.containsKey('code'))
+    return true;
   return false;
 }
 
@@ -4648,7 +5948,11 @@ String _normalize(String value) {
     final videoId = uri.pathSegments.where((e) => e.isNotEmpty).firstOrNull;
     if (videoId != null && videoId.isNotEmpty) {
       final nextQuery = <String, String>{'v': videoId, ...uri.queryParameters};
-      uri = uri.replace(host: 'youtube.com', path: '/watch', queryParameters: nextQuery);
+      uri = uri.replace(
+        host: 'youtube.com',
+        path: '/watch',
+        queryParameters: nextQuery,
+      );
       host = 'youtube.com';
     }
   }
@@ -4703,20 +6007,15 @@ String _canonicalPath(String path) {
 bool _isTrackingQueryKey(String key) {
   final k = key.toLowerCase();
   if (k.startsWith('utm_')) return true;
-  return {
-    'gclid',
-    'fbclid',
-    'igshid',
-    'mc_cid',
-    'mc_eid',
-    'si',
-  }.contains(k);
+  return {'gclid', 'fbclid', 'igshid', 'mc_cid', 'mc_eid', 'si'}.contains(k);
 }
 
 String _domainTag(String domain) {
   if (domain.contains('x.com') || domain.contains('twitter.com')) return '트위터';
-  if (domain.contains('threads.net') || domain.contains('threads.com')) return '스레드';
-  if (domain.contains('youtube.com') || domain.contains('youtu.be')) return '유튜브';
+  if (domain.contains('threads.net') || domain.contains('threads.com'))
+    return '스레드';
+  if (domain.contains('youtube.com') || domain.contains('youtu.be'))
+    return '유튜브';
   return domain;
 }
 
@@ -4730,8 +6029,14 @@ String _dashboardTitle(LinkItem item) {
 String _servicePrefix(String domain) {
   final d = domain.toLowerCase();
   if (d.contains('threads')) return '[Threads]';
-  if (d.contains('x.com') || d.contains('twitter.com') || d == 't.co' || d.contains('fixupx.com') || d.contains('fxtwitter.com')) return '[X]';
-  if (d.contains('instagram.com') || d.contains('instagr.am')) return '[Instagram]';
+  if (d.contains('x.com') ||
+      d.contains('twitter.com') ||
+      d == 't.co' ||
+      d.contains('fixupx.com') ||
+      d.contains('fxtwitter.com'))
+    return '[X]';
+  if (d.contains('instagram.com') || d.contains('instagr.am'))
+    return '[Instagram]';
   if (d.contains('cafe.naver.com')) return '[Naver Cafe]';
   if (d.contains('blog.naver.com')) return '[Naver Blog]';
   if (d.contains('youtube.com') || d.contains('youtu.be')) return '[YouTube]';
@@ -4751,16 +6056,22 @@ bool _isThreadsDomainForUi(String domain) {
 
 bool _isXDomainForUi(String domain) {
   final d = domain.toLowerCase();
-  return d.contains('x.com') || d.contains('twitter.com') || d == 't.co' || d.contains('fixupx.com') || d.contains('fxtwitter.com');
+  return d.contains('x.com') ||
+      d.contains('twitter.com') ||
+      d == 't.co' ||
+      d.contains('fixupx.com') ||
+      d.contains('fxtwitter.com');
 }
 
 String? _inboxThumbUrl(LinkItem item) {
-  final threadsProfile = _isThreadsDomainForUi(item.domain) ? _threadsProfileFromStored(item) : null;
+  final threadsProfile = _isThreadsDomainForUi(item.domain)
+      ? _threadsProfileFromStored(item)
+      : null;
   final source = _isXDomainForUi(item.domain)
       ? _firstHttpUrl([item.faviconUrl, item.imageUrl])
       : (_isThreadsDomainForUi(item.domain)
-          ? _firstHttpUrl([threadsProfile])
-          : _firstHttpUrl([item.imageUrl, item.faviconUrl]));
+            ? _firstHttpUrl([threadsProfile])
+            : _firstHttpUrl([item.imageUrl, item.faviconUrl]));
   if (source == null) return null;
   return _webImageUrlForUi(source);
 }
@@ -4769,7 +6080,8 @@ String? _firstHttpUrl(Iterable<String?> urls) {
   for (final raw in urls) {
     final value = raw?.trim();
     if (value == null || value.isEmpty) continue;
-    if (value.startsWith('http://') || value.startsWith('https://')) return value;
+    if (value.startsWith('http://') || value.startsWith('https://'))
+      return value;
   }
   return null;
 }
@@ -4780,7 +6092,10 @@ String? _threadsProfileFromStored(LinkItem item) {
     return favicon;
   }
 
-  final generated = _threadsAvatarFallbackFromUrl(item.url) ?? _threadsAvatarFallbackFromText(item.title) ?? _threadsAvatarFallbackFromText(item.description);
+  final generated =
+      _threadsAvatarFallbackFromUrl(item.url) ??
+      _threadsAvatarFallbackFromText(item.title) ??
+      _threadsAvatarFallbackFromText(item.description);
   if (generated != null && _isThreadsUsableProfileThumbnail(item, generated)) {
     return generated;
   }
@@ -4813,8 +6128,10 @@ bool _isThreadsUsableProfileThumbnail(LinkItem item, String url) {
 
 bool _isThreadsBrandLogoUrl(String lowerUrl) {
   if (lowerUrl.endsWith('/favicon.ico')) return true;
-  if (lowerUrl.contains('threads.net/assets') && lowerUrl.contains('icon')) return true;
-  if (lowerUrl.contains('threads.com/assets') && lowerUrl.contains('icon')) return true;
+  if (lowerUrl.contains('threads.net/assets') && lowerUrl.contains('icon'))
+    return true;
+  if (lowerUrl.contains('threads.com/assets') && lowerUrl.contains('icon'))
+    return true;
   if (lowerUrl.contains('icon-ios')) return true;
   if (lowerUrl.contains('apple-touch-icon')) return true;
   if (lowerUrl.contains('/favicon')) return true;
@@ -4829,7 +6146,7 @@ bool _urlsPointToSameResource(String? first, String? second) {
   String keyOf(String raw) {
     final uri = Uri.tryParse(raw);
     if (uri == null) return raw.toLowerCase();
-    
+
     // 쿼리 파라미터 제외하고 scheme, host, path만으로 비교
     // 단, path 내의 해시값 등이 다를 수 있으므로 정규화가 더 필요할 수 있지만
     // 여기서는 기본적으로 쿼리 파라미터 제거만으로도 많은 중복을 잡을 수 있음
@@ -4840,13 +6157,21 @@ bool _urlsPointToSameResource(String? first, String? second) {
   return keyOf(a) == keyOf(b);
 }
 
-List<String> _mergeMediaForUi(Iterable<String> mediaUrls, {String? fallback, Iterable<String?> exclude = const []}) {
+List<String> _mergeMediaForUi(
+  Iterable<String> mediaUrls, {
+  String? fallback,
+  Iterable<String?> exclude = const [],
+}) {
   final out = <String>[];
   final seen = <String>{};
-  for (final raw in [...mediaUrls, if (fallback != null && fallback.trim().isNotEmpty) fallback.trim()]) {
+  for (final raw in [
+    ...mediaUrls,
+    if (fallback != null && fallback.trim().isNotEmpty) fallback.trim(),
+  ]) {
     if (raw.isEmpty) continue;
     if (!raw.startsWith('http://') && !raw.startsWith('https://')) continue;
-    if (exclude.any((candidate) => _urlsPointToSameResource(raw, candidate))) continue;
+    if (exclude.any((candidate) => _urlsPointToSameResource(raw, candidate)))
+      continue;
     final resolved = _webImageUrlForUi(raw);
     if (seen.add(resolved)) out.add(resolved);
   }
@@ -4876,7 +6201,8 @@ String _webImageUrlForUi(String rawUrl) {
 
 bool _needsWebImageProxy(String host, String lowerUrl) {
   if (_isThreadsDomainForUi(host)) return true;
-  if (host.contains('instagram.com') || host.contains('cdninstagram.com')) return true;
+  if (host.contains('instagram.com') || host.contains('cdninstagram.com'))
+    return true;
   if (host.contains('fbcdn.net')) return true;
   if (lowerUrl.contains('lookaside.instagram.com')) return true;
   return false;
@@ -4884,7 +6210,9 @@ bool _needsWebImageProxy(String host, String lowerUrl) {
 
 bool _isLikelyVideoMediaUrl(String url) {
   final u = url.toLowerCase();
-  return u.contains('video.twimg.com') || u.endsWith('.mp4') || u.contains('.m3u8');
+  return u.contains('video.twimg.com') ||
+      u.endsWith('.mp4') ||
+      u.contains('.m3u8');
 }
 
 String _friendly(DateTime t) {
