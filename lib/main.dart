@@ -579,6 +579,8 @@ class AppController extends StateNotifier<AppState> {
   Timer? _sharePollTimer;
   bool _sharedBurstRunning = false;
   bool _sharePollInFlight = false;
+  bool _shareIngestRequested = false;
+  Future<void> _sharedPersistQueue = Future<void>.value();
 
   String? get _userId => _cloudConfigured ? Supabase.instance.client.auth.currentUser?.id : null;
 
@@ -914,7 +916,15 @@ class AppController extends StateNotifier<AppState> {
           ? (_threadsAvatarFallbackFromUrl(item.url) ?? _threadsAvatarFallbackFromText(item.title) ?? _threadsAvatarFallbackFromText(item.description) ?? _threadsAvatarFallbackFromText(meta.title))
           : null;
       final needsThreadsProfile = isThreads && _threadsProfileFromStored(item) == null;
-      final nextTitle = (title.isEmpty || title == item.url || isGenericTitle(title)) ? (meta.title ?? item.title) : item.title;
+      final nextTitle = (title.isEmpty || title == item.url || isGenericTitle(title))
+          ? _pickTitleForSave(
+              incomingTitle: null,
+              metaTitle: meta.title,
+              currentTitle: item.title,
+              url: item.url,
+              isThreads: isThreads,
+            )
+          : item.title;
       final nextDescription = description.isEmpty ? (meta.description ?? item.description) : item.description;
       final nextImage = image.isEmpty ? (meta.image ?? meta.mediaUrls.firstOrNull ?? item.imageUrl) : item.imageUrl;
       final sanitizedThreadsProfile = isThreads
@@ -952,6 +962,25 @@ class AppController extends StateNotifier<AppState> {
     }
   }
 
+  void _requestSharedIngest() {
+    _shareIngestRequested = true;
+    if (_sharePollInFlight) return;
+
+    _sharePollInFlight = true;
+    unawaited(() async {
+      try {
+        while (mounted && _shareIngestRequested) {
+          _shareIngestRequested = false;
+          await ingestShared();
+        }
+      } catch (e) {
+        debugPrint('shared ingest error: $e');
+      } finally {
+        _sharePollInFlight = false;
+      }
+    }());
+  }
+
   void _triggerSharedBurst() {
     if (_sharedBurstRunning) return;
     _sharedBurstRunning = true;
@@ -960,7 +989,7 @@ class AppController extends StateNotifier<AppState> {
       final startedAt = DateTime.now();
       try {
         while (mounted && DateTime.now().difference(startedAt) < const Duration(seconds: 15)) {
-          await ingestShared();
+          _requestSharedIngest();
           final elapsedMs = DateTime.now().difference(startedAt).inMilliseconds;
           final waitMs = elapsedMs < 3000 ? 120 : 300;
           await Future<void>.delayed(Duration(milliseconds: waitMs));
@@ -974,44 +1003,14 @@ class AppController extends StateNotifier<AppState> {
   void _startSharePolling() {
     _sharePollTimer?.cancel();
     _sharePollTimer = Timer.periodic(const Duration(milliseconds: 400), (_) {
-      if (!mounted || _sharePollInFlight) return;
-      _sharePollInFlight = true;
-      unawaited(() async {
-        try {
-          await ingestShared();
-        } finally {
-          _sharePollInFlight = false;
-        }
-      }());
+      if (!mounted) return;
+      _requestSharedIngest();
     });
   }
 
   void _stopSharePolling() {
     _sharePollTimer?.cancel();
     _sharePollTimer = null;
-  }
-
-  void _triggerMetadataBackfill(LinkItem item) {
-    unawaited(() async {
-      LinkItem latest = (await repo.links()).where((e) => e.id == item.id).firstOrNull ?? item;
-
-      for (var attempt = 0; attempt < 3; attempt++) {
-        final backfilled = await _backfillLinkMetadata(latest);
-        if (backfilled != null) {
-          await repo.upsert(backfilled);
-          if (backfilled.tags.isNotEmpty) {
-            await repo.ensureTags(backfilled.tags);
-          }
-          await refresh();
-          _triggerBackgroundSync();
-          return;
-        }
-
-        if (!mounted) return;
-        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
-        latest = (await repo.links()).where((e) => e.id == item.id).firstOrNull ?? latest;
-      }
-    }());
   }
 
   void _triggerBackgroundSync() {
@@ -1021,6 +1020,7 @@ class AppController extends StateNotifier<AppState> {
   }
 
   Future<void> onAppResumed() async {
+    _requestSharedIngest();
     _triggerSharedBurst();
     await checkClipboard();
     _triggerBackgroundSync();
@@ -1168,7 +1168,13 @@ class AppController extends StateNotifier<AppState> {
       
       if (existing != null) {
         savedItem = existing.copyWith(
-          title: title ?? (meta.title != null && meta.title!.isNotEmpty ? meta.title : existing.title),
+          title: _pickTitleForSave(
+            incomingTitle: title,
+            metaTitle: meta.title,
+            currentTitle: existing.title,
+            url: url,
+            isThreads: isThreads,
+          ),
           description: meta.description ?? existing.description,
           imageUrl: previewImage ?? existing.imageUrl,
           faviconUrl: isThreads
@@ -1192,7 +1198,13 @@ class AppController extends StateNotifier<AppState> {
           id: _uuid.v4(),
           url: url,
           normalizedUrl: normalized,
-          title: title ?? meta.title ?? url,
+          title: _pickTitleForSave(
+            incomingTitle: title,
+            metaTitle: meta.title,
+            currentTitle: null,
+            url: url,
+            isThreads: isThreads,
+          ),
           description: meta.description ?? '',
           imageUrl: previewImage ?? '',
           domain: meta.domain,
@@ -1224,9 +1236,6 @@ class AppController extends StateNotifier<AppState> {
       if (source == 'shared') {
         _triggerSharedBurst();
       }
-      if (source == 'shared') {
-        _triggerMetadataBackfill(savedItem);
-      }
       _triggerBackgroundSync();
       return savedItem;
     } catch (e) {
@@ -1243,10 +1252,30 @@ class AppController extends StateNotifier<AppState> {
   }
 
   void _persistSharedLink(LinkItem savedItem) {
-    unawaited(() async {
+    _sharedPersistQueue = _sharedPersistQueue.then((_) async {
       await repo.upsert(savedItem);
       await repo.ensureTags(savedItem.tags);
-    }());
+
+      LinkItem latest = (await repo.links()).where((e) => e.id == savedItem.id).firstOrNull ?? savedItem;
+      for (var attempt = 0; attempt < 3; attempt++) {
+        final backfilled = await _backfillLinkMetadata(latest);
+        if (backfilled != null) {
+          await repo.upsert(backfilled);
+          if (backfilled.tags.isNotEmpty) {
+            await repo.ensureTags(backfilled.tags);
+          }
+          _applySavedLinkOptimistically(backfilled);
+          break;
+        }
+
+        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+        latest = (await repo.links()).where((e) => e.id == savedItem.id).firstOrNull ?? latest;
+      }
+
+      _triggerBackgroundSync();
+    }).catchError((e) {
+      debugPrint('persist shared link failed: $e');
+    });
   }
 
   String? _sanitizeThreadsProfileImage(String? rawProfileImage, {String? previewImage, List<String> bodyMediaUrls = const []}) {
@@ -1265,6 +1294,52 @@ class AppController extends StateNotifier<AppState> {
     return candidate;
   }
 
+  String _pickTitleForSave({
+    required String? incomingTitle,
+    required String? metaTitle,
+    required String? currentTitle,
+    required String url,
+    required bool isThreads,
+  }) {
+    String? meaningful(String? raw) {
+      final v = raw?.trim();
+      if (v == null || v.isEmpty) return null;
+      if (isGenericTitle(v)) return null;
+      return v;
+    }
+
+    final incoming = meaningful(incomingTitle);
+    if (incoming != null) return incoming;
+
+    final meta = meaningful(metaTitle);
+    if (meta != null) return meta;
+
+    if (isThreads) {
+      final threadsFallback = _threadsTitleFallbackFromUrl(url) ?? _threadsTitleFallbackFromText(incomingTitle) ?? _threadsTitleFallbackFromText(metaTitle);
+      if (threadsFallback != null) return threadsFallback;
+    }
+
+    final current = meaningful(currentTitle);
+    if (current != null) return current;
+
+    final currentRaw = currentTitle?.trim();
+    if (currentRaw != null && currentRaw.isNotEmpty) return currentRaw;
+
+    return url;
+  }
+
+  String? _threadsTitleFallbackFromUrl(String rawUrl) {
+    final handle = Metadata._extractThreadsHandleFromUrl(rawUrl);
+    if (handle == null) return null;
+    return '@$handle';
+  }
+
+  String? _threadsTitleFallbackFromText(String? rawText) {
+    final handle = Metadata._extractThreadsHandleFromText(rawText);
+    if (handle == null) return null;
+    return '@$handle';
+  }
+
   bool isGenericTitle(String title) {
     final generic = [
       '네이버 카페', 'naver cafe', '네이버카페',
@@ -1275,7 +1350,11 @@ class AppController extends StateNotifier<AppState> {
       '트위터', 'twitter', 'x',
     ];
     final lower = title.toLowerCase().trim();
-    return generic.any((g) => lower == g || lower.startsWith('$g ') || lower.endsWith(' $g'));
+    if (generic.any((g) => lower == g || lower.startsWith('$g ') || lower.endsWith(' $g'))) return true;
+    if (lower.startsWith('[threads]')) return true;
+    if (lower.contains('threads의') && lower.contains('님')) return true;
+    if (lower.contains('threads post')) return true;
+    return false;
   }
 
   Future<List<LinkItem>> ingestShared() async {
@@ -2002,7 +2081,17 @@ class Metadata {
     final uri = Uri.parse(url);
     var domain = uri.host.replaceFirst('www.', '');
     final favicon = '${uri.scheme}://$domain/favicon.ico';
-    final requestTimeout = (domain.contains('naver.com') || _isXDomain(domain)) ? const Duration(seconds: 8) : const Duration(seconds: 4);
+    final isThreads = _isThreadsDomain(domain);
+    final isX = _isXDomain(domain);
+    final requestTimeout = (domain.contains('naver.com') || isX || isThreads)
+        ? const Duration(seconds: 8)
+        : const Duration(seconds: 4);
+
+    // 사회 정보망 크롤러(Social Crawler)처럼 보이게 하여 로그인 벽을 우회함
+    // 특히 2025년 기준 Twitterbot UA와 브라우저 핵심 헤더 조합이 안정적임
+    const socialCrawlerUA = 'Twitterbot/1.0';
+    final useSocialCrawler = isThreads || isX;
+    final userAgent = useSocialCrawler ? socialCrawlerUA : 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
 
     String? youtubeImage;
     if (domain.contains('youtube.com') || domain.contains('youtu.be')) {
@@ -2020,9 +2109,16 @@ class Metadata {
       // 1. 기본 요청 (리다이렉트 확인용)
       final normalizedUri = _normalizeNaverCafeUri(uri);
       var request = http.Request('GET', normalizedUri);
-      // 네이버 카페 앱 느낌의 User-Agent 사용
-      request.headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
+      // 도메인에 따라 적절한 User-Agent 및 브라우저 힌트 헤더 설정
+      request.headers['User-Agent'] = userAgent;
+      request.headers['Accept'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8';
       request.headers['Accept-Language'] = 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
+      if (useSocialCrawler) {
+        request.headers['Sec-Fetch-Dest'] = 'document';
+        request.headers['Sec-Fetch-Mode'] = 'navigate';
+        request.headers['Sec-Fetch-Site'] = 'none';
+        request.headers['Sec-Fetch-User'] = '?1';
+      }
       request.followRedirects = true;
       request.maxRedirects = 5;
 
@@ -2036,7 +2132,7 @@ class Metadata {
       if (mobileTarget != null && mobileTarget.toString() != finalUrl.toString()) {
         debugPrint('Converting Naver URL to Mobile: $mobileTarget');
         final mRequest = http.Request('GET', mobileTarget);
-        mRequest.headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
+        mRequest.headers['User-Agent'] = userAgent;
         mRequest.headers['Accept-Language'] = 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7';
         mRequest.followRedirects = true;
         mRequest.maxRedirects = 5;
@@ -2138,6 +2234,38 @@ class Metadata {
         if (image == null || image.trim().isEmpty) {
           image = threadMediaUrls.firstOrNull;
         }
+
+        final oEmbed = await _fetchThreadsOEmbedFallback(client, finalUrl, requestTimeout);
+        if (oEmbed != null) {
+          if (_isWeakThreadsTitle(title)) {
+            title = _firstNonBlank([
+              oEmbed['title'] as String?,
+              oEmbed['authorName'] as String?,
+              title,
+            ]);
+          }
+          description = _firstNonBlank([description, oEmbed['description'] as String?]);
+          threadProfileImage = _firstNonBlank([threadProfileImage, oEmbed['profileImage'] as String?]);
+        }
+
+        threadProfileImage = _firstNonBlank([
+          threadProfileImage,
+          _threadsProfileFromHandle(_extractThreadsHandleFromUrl(finalUrl.toString())),
+        ]);
+
+        // JSON-LD에서 내용을 추가로 시도 (크롤러 UA 사용 시 풍부한 데이터가 나옴)
+        final scripts = document.querySelectorAll('script[type="application/ld+json"]');
+        for (final script in scripts) {
+          try {
+            final data = jsonDecode(script.text);
+            if (data is Map) {
+              final text = data['articleBody'] ?? data['description'] ?? data['text'];
+              if (text != null && text.toString().length > (description?.length ?? 0)) {
+                description = text.toString();
+              }
+            }
+          } catch (_) {}
+        }
       }
 
       if (_isXDomain(finalDomain)) {
@@ -2214,6 +2342,30 @@ class Metadata {
       );
     } catch (e) {
       debugPrint('Metadata fetch error: $e');
+
+      if (_isThreadsDomain(domain)) {
+        try {
+          final oEmbed = await _fetchThreadsOEmbedFallback(client, uri, const Duration(seconds: 3));
+          if (oEmbed != null) {
+            final fallbackHandle = _extractThreadsHandleFromUrl(uri.toString());
+            final fallbackTitle = _firstNonBlank([
+              oEmbed['title'] as String?,
+              oEmbed['authorName'] as String?,
+              fallbackHandle == null ? null : '@$fallbackHandle',
+              uri.toString(),
+            ]);
+            return Meta(
+              domain: domain,
+              favicon: favicon,
+              title: fallbackTitle,
+              description: oEmbed['description'] as String?,
+              image: youtubeImage,
+              profileImage: oEmbed['profileImage'] as String?,
+            );
+          }
+        } catch (_) {}
+      }
+
       return Meta(domain: domain, favicon: favicon, image: youtubeImage);
     } finally {
       client.close();
@@ -2384,27 +2536,27 @@ class Metadata {
 
     final unique = _mergeUniqueUrls([], candidates);
 
+    // 1st pass: Extremely likely profile images (ignore content overlap)
+  for (final url in unique) {
+    final lower = url.toLowerCase();
+    if (_isThreadsBrandLogoUrl(lower)) continue;
+    if (_looksLikeThreadsProfileImage(lower)) return url;
+  }
+
+  // 2nd pass: Other candidates that don't overlap with content
+  for (final url in unique) {
+    final lower = url.toLowerCase();
+    if (_isThreadsBrandLogoUrl(lower)) continue;
+    if (overlapsContent(url)) continue;
+    return url;
+  }
+
+  if (contentMediaUrls.isEmpty) {
     for (final url in unique) {
-      final lower = url.toLowerCase();
-      if (_isThreadsBrandLogoUrl(lower)) continue;
-      if (!_looksLikeThreadsProfileImage(lower)) continue;
-      if (overlapsContent(url)) continue;
+      if (_isThreadsBrandLogoUrl(url.toLowerCase())) continue;
       return url;
     }
-
-    for (final url in unique) {
-      final lower = url.toLowerCase();
-      if (_isThreadsBrandLogoUrl(lower)) continue;
-      if (overlapsContent(url)) continue;
-      return url;
-    }
-
-    if (contentMediaUrls.isEmpty) {
-      for (final url in unique) {
-        if (_isThreadsBrandLogoUrl(url.toLowerCase())) continue;
-        return url;
-      }
-    }
+  }
 
     return null;
   }
@@ -2515,8 +2667,8 @@ class Metadata {
     final out = <String>[];
     final seen = <String>{};
     final patterns = [
-      RegExp(r'profile_pic_url(?:_hd)?"?\s*[:=]\s*"([^"]+)"', caseSensitive: false),
-      RegExp(r'avatar(?:_url)?"?\s*[:=]\s*"([^"]+)"', caseSensitive: false),
+      RegExp(r'''profile_pic_url(?:_hd)?["']?\s*[:=]\s*["']([^"']+)["']''', caseSensitive: false),
+      RegExp(r'''avatar(?:_url)?["']?\s*[:=]\s*["']([^"']+)["']''', caseSensitive: false),
     ];
 
     for (final script in doc.querySelectorAll('script')) {
@@ -2610,6 +2762,86 @@ class Metadata {
         h.endsWith('.fxtwitter.com') ||
         h == 'vxtwitter.com' ||
         h.endsWith('.vxtwitter.com');
+  }
+
+  static bool _isWeakThreadsTitle(String? title) {
+    final t = title?.trim().toLowerCase() ?? '';
+    if (t.isEmpty) return true;
+    if (t.startsWith('[threads]')) return true;
+    if (t.contains('threads의') && t.contains('님')) return true;
+    if (t.contains('threads post')) return true;
+    if (t == 'threads') return true;
+    return false;
+  }
+
+  static Future<Map<String, dynamic>?> _fetchThreadsOEmbedFallback(http.Client client, Uri sourceUrl, Duration timeout) async {
+    final hosts = ['www.threads.net', 'www.threads.com'];
+
+    for (final host in hosts) {
+      try {
+        final oembedUri = Uri.https(host, '/oembed', {
+          'url': sourceUrl.toString(),
+          'omit_script': '1',
+        });
+
+        final request = http.Request('GET', oembedUri);
+        request.headers['Accept'] = 'application/json';
+        request.headers['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 Safari/604.1';
+        request.followRedirects = true;
+        request.maxRedirects = 5;
+
+        final streamed = await client.send(request).timeout(timeout);
+        final response = await http.Response.fromStream(streamed);
+        if (response.statusCode < 200 || response.statusCode >= 400) continue;
+
+        final raw = jsonDecode(utf8.decode(response.bodyBytes, allowMalformed: true));
+        if (raw is! Map) continue;
+        final map = Map<String, dynamic>.from(raw);
+
+        final title = _normalizeText(map['title'] as String?);
+        final htmlDescription = _extractTweetTextFromEmbedHtml(map['html'] as String?);
+        final authorName = _normalizeText(map['author_name'] as String?);
+        final authorUrl = _normalizeText(map['author_url'] as String?);
+        final handle = _extractThreadsHandleFromUrl(authorUrl) ?? _extractThreadsHandleFromText(authorName);
+        final profileImage = _threadsProfileFromHandle(handle);
+
+        if (title == null && htmlDescription == null && authorName == null && profileImage == null) continue;
+        return {
+          'title': title,
+          'description': htmlDescription,
+          'authorName': authorName,
+          'profileImage': profileImage,
+        };
+      } catch (_) {
+        continue;
+      }
+    }
+
+    return null;
+  }
+
+  static String? _extractThreadsHandleFromUrl(String? rawUrl) {
+    final v = _normalizeText(rawUrl);
+    if (v == null) return null;
+    final match = RegExp(r'@([A-Za-z0-9._]+)').firstMatch(v);
+    final handle = match?.group(1)?.trim();
+    if (handle == null || handle.isEmpty) return null;
+    return handle;
+  }
+
+  static String? _extractThreadsHandleFromText(String? rawText) {
+    final v = _normalizeText(rawText);
+    if (v == null) return null;
+    final match = RegExp(r'@([A-Za-z0-9._]+)').firstMatch(v);
+    final handle = match?.group(1)?.trim();
+    if (handle == null || handle.isEmpty) return null;
+    return handle;
+  }
+
+  static String? _threadsProfileFromHandle(String? handle) {
+    final h = _normalizeText(handle)?.replaceFirst('@', '').trim();
+    if (h == null || h.isEmpty) return null;
+    return 'https://unavatar.io/threads/$h';
   }
 
   static bool _isGenericXTitle(String? title) {
@@ -4557,21 +4789,14 @@ String? _threadsProfileFromStored(LinkItem item) {
 }
 
 String? _threadsAvatarFallbackFromUrl(String rawUrl) {
-  final uri = Uri.tryParse(rawUrl);
-  if (uri == null) return null;
-  final handleSeg = uri.pathSegments.where((s) => s.startsWith('@')).firstOrNull;
-  if (handleSeg == null) return null;
-  final handle = handleSeg.replaceFirst('@', '').trim();
-  if (handle.isEmpty) return null;
+  final handle = Metadata._extractThreadsHandleFromUrl(rawUrl);
+  if (handle == null) return null;
   return 'https://unavatar.io/threads/$handle';
 }
 
 String? _threadsAvatarFallbackFromText(String? rawText) {
-  final text = rawText?.trim();
-  if (text == null || text.isEmpty) return null;
-  final match = RegExp(r'@([A-Za-z0-9._]+)').firstMatch(text);
-  final handle = match?.group(1)?.trim();
-  if (handle == null || handle.isEmpty) return null;
+  final handle = Metadata._extractThreadsHandleFromText(rawText);
+  if (handle == null) return null;
   return 'https://unavatar.io/threads/$handle';
 }
 
